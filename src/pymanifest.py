@@ -3,6 +3,7 @@ from typing import List, Mapping, Iterable, Union
 from pathlib import Path
 import json
 from copy import deepcopy
+
 # third parties
 import jsonschema
 
@@ -68,12 +69,7 @@ MANIFEST_SCHEMA = {
             "item": {"$ref": "#/definitions/cached-override"},
         },
     },
-    "required": [
-        "pack-version",
-        "packmodes",
-        "mods",
-        "overrides-cache",
-    ],
+    "required": ["pack-version", "packmodes", "mods", "overrides-cache",],
     "additionalProperties": False,
 }
 
@@ -84,14 +80,16 @@ DEFAULT_MANIFEST = {
     "overrides-url": "",
     "mods": [],
     "overrides": [],
-    "overrides-cache": []
+    "overrides-cache": [],
 }
+
 
 def get_default_manifest():
     """
     Returns a new default manifest in JSON
     """
     return deepcopy(DEFAULT_MANIFEST)
+
 
 class BaseManifestError(Exception):
     """
@@ -253,5 +251,3 @@ def get_override_packmode(
             key = str(relpath.parents[i])
             if key in overrides:
                 return overrides[key]
-
-
