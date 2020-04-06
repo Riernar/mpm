@@ -9,7 +9,7 @@ from . import utils
 def build_new_modlist(pack_manifest, curse_manifest):
     """
     From an old pack_manifest and the curse_manifest file of the update
-        compute the neew modlist in pack_manifest format
+        compute the new modlist in pack_manifest format
     
     Arguments
         pack_manifest -- the pack manifest of the current version

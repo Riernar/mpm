@@ -1,8 +1,9 @@
 import tkinter as tk
 import tkinter.ttk as ttk
+from collections import defaultdict
 from collections.abc import Mapping
 from abc import ABC, abstractmethod
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from . import pymanifest
 from . import utils
@@ -427,10 +428,10 @@ class OverridesGUI(PackmodeBaseGUI):
         )
         self.overrides = overrides
         self.override_packmode_map = {
-            Path(entry["filepath"]).parts: pymanifest.get_override_packmode(
+            PurePath(entry["filepath"]).parts: pymanifest.get_override_packmode(
                 overrides, entry["filepath"]
             )
-            for entry in overrides_cache
+            for entry in sorted(overrides_cache, key=lambda override: override["filepath"])
         }
 
     def refresh_uis(self):
@@ -463,33 +464,107 @@ class OverridesGUI(PackmodeBaseGUI):
                 self.override_packmode_map[parts] = None
         self.refresh_uis()
 
+    def _build_file_tree(self):
+        """
+        Builds the file tree for overrides compaction
+        """
+        # Build file tree with packmode and weigth info (# of file in the packmode)
+        root = {
+            "packmode": None,
+            "weight": None,
+            "children": {}
+        }
+        for filepath, packmode in self.override_packmode_map.items():
+            node = root
+            for part in filepath:
+                node = node["children"].setdefault(part, {"packmode": None, "weight": None, "children": {}})
+            node["weight"] = 1
+            node["packmode"] = packmode
+        return root
+    
+    def _dfs_assign(self, filetree):
+        """
+        Uses DFS to assign to directory the packmode with maximum weight
+
+        The override format support assigning a whole directory to a packmode,
+        and having exception in that directory
+        This method assign the packmode with the most files to the directory,
+        so that the least amount of files/directory needs to be specified in
+        the "overrides" property
+        """
+        stack = [filetree]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, tuple) and node["packmode"] is None:
+                # all children have been seen already, assing packmode
+                node = node[0]  #unpack the actual node
+                weights = defaultdict(int)
+                for child in node["children"]:
+                    weights[child["packmode"]] += child["weight"]
+                packmode, weight = max(weights.items(), key=lambda x: x[1])
+                node["weight"] = weight
+                node["packmode"] = packmode
+            elif node["children"]:
+                # schedule that node for computation
+                stack.append((node,))
+                # visit all children first
+                for child in node["children"].values():
+                    stack.append(child)
+    
+    def _write_overrides(self, node, parent_packmode=None, path_parts=tuple()):
+        """
+        Uses recursive DFS to write the overrides from a weigthed, assigned file tree
+        """
+        if parent_packmode and node["packmode"] != parent_packmode:
+            self.overrides[str(PurePath(*path_parts))] = node["packmode"]
+        for key, child in node["children"].items():
+            self._write_overrides(child, parent_packmode=node["packmode"], path_parts=path_parts + (key,))
+
     def on_exit(self):
         if any(self.override_packmode_map.values() is None):
             raise ValueError("Some overrides don't have a packmode")
-        self.overrides = None
-        # TODO
-        # Build the "overrides" from the assignement
-        # and compact it (recursively assign the packmode with the most files
-        # to the folder instead of each of its children, going bottom-up)
-        raise NotImplementedError
+        self.status.config(text="Compacting overrides assignemnts ...")
+        # Build the file tree
+        root = self._build_file_tree()
+        # Assign packmode to directory to compact overrides assignements
+        self._dfs_assign(root)
+        # Write the overrides, delegating some overrides assignemnt to parent dir
+        self.overrides = {}
+        self._write_overrides(root)
 
 
-def assign_mods(packmodes_defs, mods):
+def assign_mods(packmodes, mods):
     """
-    Assign mods to packmodes using a GUI, modifying 'mods' in-place
+    Assign mods to packmodes using a GUI. Might modify args in-place
 
     Arguments
-        packmodes_defs -- packmode definitions, the "packmodes" property
+        packmodes -- packmode definitions, the "packmodes" property
             of a pack_manifest
         mods -- mods definitions, the "mods" property of a pack manifest
             ! their names must be resolved !
     
     Return
-        ('packmodes_defs', 'mods'), modified in-place
+        the new ('packmodes', 'mods')
     """
-    unassigned = [mod for mod in mods if "packmode" not in mod]
-    if not unassigned:
-        return packmodes_defs, mods
-    gui = ModGUI(packmodes_defs, mods)
+    gui = ModGUI(packmodes, mods)
     gui.run()
-    return gui.packmodes, gui.mod_list
+    return  gui.packmodes, gui.mod_list
+
+def assign_overrides(packmodes, overrides, overrides_cache):
+    """
+    Assign overrides to packmodes using a GUI, and compact
+    assignment
+
+    Arguments
+        packmodes -- "packmodes" property of a pack_manifest, the packmodes definitions
+        overrides -- "overrides" property of a pack_manifest, overrides assignemnts to packmodes
+        overrides-cache -- "overrides-cache" property of a pack_manifest, list of overrides filepath and hash
+    
+    Returns
+        (packmodes, overrides)
+        packmodes definition (some packmodes may be added in the GUI)
+        overrides assignements to packmodes
+    """
+    gui = OverridesGUI(packmodes, overrides_cache, overrides)
+    gui.run()
+    return gui.packmodes, gui.overrides
