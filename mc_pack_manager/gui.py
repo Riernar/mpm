@@ -1,12 +1,22 @@
-import tkinter as tk
-import tkinter.ttk as ttk
+"""
+Part of the Minecraft Pack Manager utility (mpm)
+
+Module for GUIs used in mpm
+"""
+# Standard lib import
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Mapping
-from abc import ABC, abstractmethod
+import logging
 from pathlib import Path, PurePath
+import tkinter as tk
+import tkinter.ttk as ttk
 
-from . import pymanifest
+# Local import
+from . import manifest
 from . import utils
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Dropdown(ttk.Combobox):
@@ -265,6 +275,7 @@ class BaseGUI(ABC):
         try:
             self.on_exit()
         except Exception as err:
+            LOGGER.debug("GUI canceled exit due to %s", utils.err_str(err))
             self.status.config(text=utils.err_str(err))
         else:
             self.root.destroy()
@@ -334,19 +345,27 @@ class PackmodeBaseGUI(BaseGUI, ABC):
 
     def on_add(self):
         name = self.entry_name.get()
+        LOGGER.debug("Creating packmode '%s'", name)
         if name in self.packmodes.keys() | {"server"}:
             self.status.config(text="Packmode '%s' already exists !" % name)
+            LOGGER.debug("Couldn't create '%s', it already exists", name)
             return
         self.packmodes[name] = self.selector_dependencies.get_selection()
         try:
-            pymanifest.validate_dependencies(self.packmodes)
+            manifest.validate_dependencies(self.packmodes)
         except Exception as err:
-            self.status.config(text=utils.err_str(err))
+            msg = "Couldn't create '%s', validation failed due to %s" % (
+                name,
+                utils.err_str(err),
+            )
+            self.status.config(text=msg)
             del self.packmodes[name]
+            LOGGER.debug(msg)
             return
         new_ui = self.make_packmode_ui(self.right, name)
         new_ui["frame"].pack(side="top")
         self.packmode_uis[name] = new_ui
+        LOGGER.debug("Created packmode '%s'", name)
 
     @abstractmethod
     def refresh_uis(self):
@@ -397,6 +416,11 @@ class ModGUI(PackmodeBaseGUI):
         for mod in self.mod_list:
             if mod["name"] in selection:
                 mod["packmode"] = packmode
+        LOGGER.debug(
+            "Assigned the following mods to %s:\n - %s",
+            packmode,
+            "\n - ".join(sorted(selection)),
+        )
         self.refresh_uis()
 
     def on_unassign(self):
@@ -408,6 +432,9 @@ class ModGUI(PackmodeBaseGUI):
         for mod in self.mod_list:
             if mod["name"] in selection and "packmode" in mod:
                 del mod["packmode"]
+        LOGGER.debug(
+            "Unassigned the following mods:\n - %s", "\n - ".join(sorted(selection))
+        )
         self.refresh_uis()
 
     def on_exit(self):
@@ -428,10 +455,12 @@ class OverridesGUI(PackmodeBaseGUI):
         )
         self.overrides = overrides
         self.override_packmode_map = {
-            PurePath(entry["filepath"]).parts: pymanifest.get_override_packmode(
+            PurePath(entry["filepath"]).parts: manifest.get_override_packmode(
                 overrides, entry["filepath"]
             )
-            for entry in sorted(overrides_cache, key=lambda override: override["filepath"])
+            for entry in sorted(
+                overrides_cache, key=lambda override: override["filepath"]
+            )
         }
 
     def refresh_uis(self):
@@ -469,19 +498,17 @@ class OverridesGUI(PackmodeBaseGUI):
         Builds the file tree for overrides compaction
         """
         # Build file tree with packmode and weigth info (# of file in the packmode)
-        root = {
-            "packmode": None,
-            "weight": None,
-            "children": {}
-        }
+        root = {"packmode": None, "weight": None, "children": {}}
         for filepath, packmode in self.override_packmode_map.items():
             node = root
             for part in filepath:
-                node = node["children"].setdefault(part, {"packmode": None, "weight": None, "children": {}})
+                node = node["children"].setdefault(
+                    part, {"packmode": None, "weight": None, "children": {}}
+                )
             node["weight"] = 1
             node["packmode"] = packmode
         return root
-    
+
     def _dfs_assign(self, filetree):
         """
         Uses DFS to assign to directory the packmode with maximum weight
@@ -497,7 +524,7 @@ class OverridesGUI(PackmodeBaseGUI):
             node = stack.pop()
             if isinstance(node, tuple) and node["packmode"] is None:
                 # all children have been seen already, assing packmode
-                node = node[0]  #unpack the actual node
+                node = node[0]  # unpack the actual node
                 weights = defaultdict(int)
                 for child in node["children"]:
                     weights[child["packmode"]] += child["weight"]
@@ -510,7 +537,7 @@ class OverridesGUI(PackmodeBaseGUI):
                 # visit all children first
                 for child in node["children"].values():
                     stack.append(child)
-    
+
     def _write_overrides(self, node, parent_packmode=None, path_parts=tuple()):
         """
         Uses recursive DFS to write the overrides from a weigthed, assigned file tree
@@ -518,12 +545,15 @@ class OverridesGUI(PackmodeBaseGUI):
         if parent_packmode and node["packmode"] != parent_packmode:
             self.overrides[str(PurePath(*path_parts))] = node["packmode"]
         for key, child in node["children"].items():
-            self._write_overrides(child, parent_packmode=node["packmode"], path_parts=path_parts + (key,))
+            self._write_overrides(
+                child, parent_packmode=node["packmode"], path_parts=path_parts + (key,)
+            )
 
     def on_exit(self):
         if any(self.override_packmode_map.values() is None):
             raise ValueError("Some overrides don't have a packmode")
         self.status.config(text="Compacting overrides assignemnts ...")
+        LOGGER.info("Compacting overrides assignemnts")
         # Build the file tree
         root = self._build_file_tree()
         # Assign packmode to directory to compact overrides assignements
@@ -546,9 +576,11 @@ def assign_mods(packmodes, mods):
     Return
         the new ('packmodes', 'mods')
     """
+    LOGGER.info("Creating GUI for mods assignements")
     gui = ModGUI(packmodes, mods)
     gui.run()
-    return  gui.packmodes, gui.mod_list
+    return gui.packmodes, gui.mod_list
+
 
 def assign_overrides(packmodes, overrides, overrides_cache):
     """
@@ -565,6 +597,7 @@ def assign_overrides(packmodes, overrides, overrides_cache):
         packmodes definition (some packmodes may be added in the GUI)
         overrides assignements to packmodes
     """
+    LOGGER.info("Creating GUI for overrides assignements")
     gui = OverridesGUI(packmodes, overrides_cache, overrides)
     gui.run()
     return gui.packmodes, gui.overrides

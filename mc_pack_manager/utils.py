@@ -1,11 +1,20 @@
+"""
+Part of the Minecraft Pack Manager utility (mpm)
+
+Miscellaneous utilities
+"""
+# Standard lib import
 from collections import namedtuple
 from collections.abc import Iterable
-from typing import TypeVar, Mapping, Iterable, Union, List
-from pathlib import Path
-import hashlib
-from traceback import format_exception_only
 from functools import wraps
+import hashlib
 import inspect
+import logging
+from pathlib import Path
+from traceback import format_exception_only
+from typing import TypeVar, Mapping, Iterable, Union, List
+
+LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -105,10 +114,15 @@ class DFSError(Exception):
     """
 
 
-class RuntimeDFSError(DFSError):
+class RuntimeDFSError(AutoFormatError, DFSError):
     """
     Class for runtime problems in DFS (should not happen)
     """
+
+    def __init__(self, stack, path, message="Stack: {stack}, Path:{path}"):
+        super().__init__(message)
+        self.stack = stack
+        self.path = path
 
 
 class CycleDFSError(AutoFormatError, DFSError):
@@ -159,7 +173,7 @@ def dfs(
         if isinstance(node, Node):
             is_active[node.value] = False
             if path[-1] != node.value:
-                raise RuntimeError("Stack: %s, Path:%s" % (stack + [node], path))
+                raise RuntimeError(stack=stack + [node], path=path)
             path.pop()
             continue
         path.append(node)
@@ -168,7 +182,6 @@ def dfs(
         is_active[node] = True
         stack.append(Node(node))
         for child in graph.get(node, []):
-            # state = is_active.get(child)
             if is_active.get(child) is None:
                 stack.append(child)
             elif not is_active[child]:

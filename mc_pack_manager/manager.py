@@ -1,9 +1,17 @@
+"""
+Part of the Minecraft Pack Manager utility (mpm)
+
+Main interface
+"""
 # Standard library imports
+import logging
 from pathlib import Path
 
 # local imports
 from . import network as net
 from . import utils
+
+LOGGER = logging.getLogger(__name__)
 
 
 def build_new_modlist(pack_manifest, curse_manifest):
@@ -19,6 +27,7 @@ def build_new_modlist(pack_manifest, curse_manifest):
         the "mods" property of the pack manifest for the new version. Mods
         not found in pack_manifest *won't* have a packmode "property"
     """
+    LOGGER.info("Building modlist from curse manifest.jsons",)
     mod_map = {mod["addonID"]: mod for mod in pack_manifest["mods"]}
     new_mods = []
     for file_data in curse_manifest["files"]:
@@ -45,6 +54,7 @@ def build_overrides_cache(overrides_dir: Path):
     Returns
         The "overrides-cache" property of the pack_manifest for the update
     """
+    LOGGER.info("Building override cache for %s", overrides_dir)
     overrides_dir = Path(overrides_dir)
     overrides_cache = []
     for filepath in overrides_dir.rglob("*"):
@@ -54,6 +64,7 @@ def build_overrides_cache(overrides_dir: Path):
                 overrides_cache.append(
                     {"filepath": str(rel_path), "hash": utils.file_hash(filepath)}
                 )
+    LOGGER.info("Sorting egenrated override cache")
     return sorted(overrides_cache, key=lambda cached: cached["filepath"])
 
 

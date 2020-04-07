@@ -1,14 +1,22 @@
+"""
+Part of the Minecraft Pack Manager utility (mpm)
+
+Module for creating and reading pack and curse manifest
+"""
 # standard library
-from typing import List, Mapping, Iterable, Union
-from pathlib import Path
-import json
 from copy import deepcopy
+import json
+import logging
+from pathlib import Path
+from typing import List, Mapping, Iterable, Union
 
 # third parties
 import jsonschema
 
 # local import
 from . import utils
+
+LOGGER = logging.getLogger(__name__)
 
 MANIFEST_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -174,7 +182,7 @@ def validate_dependencies(packmode_dependencies: Mapping[str, Iterable[str]]):
         raise CircularDependencyError(cycle=err.cycle)
 
 
-def validate_packmodes(pack_manifest):
+def validate_packmode_assignments(pack_manifest):
     """
     Validates overrides' and mods' packmode are defined
     Arguments
@@ -207,9 +215,13 @@ def validate_packmodes(pack_manifest):
 
 
 def validate_manifest(pack_manifest):
-    jsonschema.validate(instance=pack_manifest, schema=MANIFEST_SCHEMA)
-    validate_dependencies(pack_manifest["packmodes"])
-    validate_packmodes(pack_manifest)
+    try:
+        jsonschema.validate(instance=pack_manifest, schema=MANIFEST_SCHEMA)
+        validate_dependencies(pack_manifest["packmodes"])
+        validate_packmode_assignments(pack_manifest)
+    except Exception as err:
+        LOGGER.debug("Pack manifest validation failed due to %s", utils.err_str(err))
+        raise
 
 
 def read_manifest_file(filepath: Path):
@@ -219,6 +231,7 @@ def read_manifest_file(filepath: Path):
     Arguments
         filepath -- path to the manifest file
     """
+    LOGGER.debug("Reading pack-manifest file %s", filepath)
     filepath = Path(filepath)
     with filepath.open() as f:
         pack_manifest = json.load(f)
