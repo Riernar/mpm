@@ -223,5 +223,6 @@ def err_str(err):
     """
     return "".join(format_exception_only(type(err), err))
 
+
 def err_traceback(err):
     return "".join(format_tb(err.__traceback__))

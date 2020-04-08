@@ -36,7 +36,9 @@ def build_new_modlist(pack_manifest, curse_manifest):
         the "mods" property of the pack manifest for the new version. Mods
         not found in pack_manifest *won't* have a packmode "property"
     """
-    LOGGER.info("Building new modlist - this might take a while if mod names needs resolving")
+    LOGGER.info(
+        "Building new modlist - this might take a while if mod names needs resolving"
+    )
     mod_map = {mod["addonID"]: mod for mod in pack_manifest["mods"]}
     new_mods = []
     for file_data in curse_manifest["files"]:
@@ -82,7 +84,12 @@ def compute_mod_diff(
         updated=updated,
         added=new_addons.keys() - old_addons.keys(),
     )
-    LOGGER.info("%s deleted, %s updated, %s added", len(diff.deleted), len(diff.updated), len(diff.added))
+    LOGGER.info(
+        "%s deleted, %s updated, %s added",
+        len(diff.deleted),
+        len(diff.updated),
+        len(diff.added),
+    )
     if loglevel is not None:
         LOGGER.info("Resolving mod versions. This might take a while")
     sort_key = lambda addonID: old_addons.get(addonID, new_addons.get(addonID))["name"]
