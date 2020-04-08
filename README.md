@@ -29,4 +29,4 @@ Main features include:
     + [ ] support update using the full pack .zip
 - [ ] compatibility with curse modpack format
     + [ ] create .zip for modpack first install
-- [ ] use a new manifest format to support features
+- [X] use a new manifest format to support features
