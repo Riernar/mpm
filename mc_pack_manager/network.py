@@ -8,7 +8,7 @@ import json
 import logging
 import requests
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("mpm.network")
 
 
 class TwitchAPI:

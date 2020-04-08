@@ -7,6 +7,7 @@ Module for GUIs used in mpm
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Mapping
+from copy import deepcopy
 import logging
 from pathlib import Path, PurePath
 import tkinter as tk
@@ -16,13 +17,17 @@ import tkinter.ttk as ttk
 from . import manifest
 from . import utils
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("mpm.gui")
+
+ttk.FrameSave = ttk.Frame
+ttk.Frame = ttk.LabelFrame
 
 
 class Dropdown(ttk.Combobox):
     def __init__(self, master, values, *args, interactive=True, **kwargs):
         state = "readonly" if not interactive else None
         width = max(len(str(v)) for v in values) + 1
+        values = list(values)
         super().__init__(
             master, *args, state=state, values=values, width=width, **kwargs
         )
@@ -31,6 +36,7 @@ class Dropdown(ttk.Combobox):
 
     def set_values(self, values):
         selected = self.get()
+        values = list(values)
         self.config(values=values)
         self.set(selected if selected in values else values[0])
 
@@ -40,19 +46,20 @@ class MultiSelector(ttk.Treeview):
     Widget to select/deselect multiple element in a list, with a scrollbar
     """
 
-    def __init__(self, master, values, *args, height=5, **kwargs):
+    def __init__(self, master, values, *args, height=5, min_height=3, **kwargs):
         self.frame_ = ttk.Frame(master=master)
         super().__init__(
             *args,
             master=self.frame_,
             show="tree",
             columns=["cache"],
-            height=min(len(values), height),
+            height=max(3, min(len(values), height)),
             **kwargs
         )
+        self.height_arg = height
+        self.min_height_arg = min_height
         self.column("cache", width=0, minwidth=0, stretch=False)
         self.bind("<1>", self.on_click)
-        self.set_values(values)
         self.button_frame = ttk.Frame(master=self.frame_)
         self.button_all = ttk.Button(
             master=self.button_frame, text="All", command=self.select_all
@@ -63,19 +70,23 @@ class MultiSelector(ttk.Treeview):
         self.button_toggle = ttk.Button(
             master=self.button_frame, text="Toggle", command=self.select_toggle
         )
-        self.button_frame.pack(side="bottom")
-        self.button_all.pack(side="left")
-        self.button_clear.pack(side="left")
-        self.button_toggle.pack(side="left")
-        if height < len(values):
-            self.scrollbar_ = ttk.Scrollbar(
+        self.button_frame.pack(side="bottom", fill="x")
+        self.button_all.pack(side="left", fill="x", expand=True)
+        self.button_clear.pack(side="left", fill="x", expand=True)
+        self.button_toggle.pack(side="left", fill="x", expand=True)
+        self.scrollbar_ = ttk.Scrollbar(
                 master=self.frame_, orient=tk.VERTICAL, command=self.yview
             )
-            self.configure(yscrollcommand=self.scrollbar_.set)
-            self.scrollbar_.pack(side="right", expand=True, fill="y")
+        self.configure(yscrollcommand=self.scrollbar_.set)
+        self.scrollbar_.pack(side="right", expand=False, fill="y")
         self.pack(side="left", expand=True, fill="both")
+        self.set_values(values)
         self.pack = self.frame_.pack
         self.grid = self.frame_.grid
+    
+    def adapt_display(self, item_number):
+        height = max(self.min_height_arg, min(item_number, self.height_arg))
+        self.config(height=height)
 
     def set_values(self, values):
         selection = set(self.get_selection())
@@ -84,6 +95,8 @@ class MultiSelector(ttk.Treeview):
         for value in values:
             self.insert("", "end", text=str(value), values=(value,))
         self.set_selection(selection & set(values))
+        self.adapt_display(len(values))
+        
 
     def get_selection(self):
         """
@@ -141,17 +154,20 @@ class NestedMultiSelector(MultiSelector):
     """
 
     sep_char = "/"
+    undefined_value = "__UNDEFINED__"
 
-    def __init__(self, master, nested_values, *args, height=10, **kwargs):
+    def __init__(self, master, values, *args, height=13, min_height=7, **kwargs):
         """
         Arguments
             master -- parent widget
-            nested_values -- nested structure to select from. Either:
+            values -- nested structure to select from. Either:
                 - a nested dict, with key mapping to all sub-elements and leaves ammped to '{}'
                 - an iterable of items, where item an item is the path from the root
                     to the last element
         """
-        super().__init__(master, nested_values, *args, height=height, **kwargs)
+        super().__init__(master, values, *args, height = height, min_height = min_height, **kwargs)
+        self.bind("<Double-Button-1>", self.on_double_click)
+        self.click_job = None
 
     def _flatten_dfs(self, mapping, prefix=tuple(), flattened=None):
         flat_values = flattened or []
@@ -172,44 +188,46 @@ class NestedMultiSelector(MultiSelector):
                 node = node.setdefault(value, {})
         return nested_mapping
 
-    def _rec_insert(self, mapping, prefix=tuple()):
+    def _rec_insert(self, mapping, prefix=tuple(), inserted=None):
         parent = self.sep_char.join(prefix)
+        if inserted is None:
+            inserted = set()
         for key, value in mapping.items():
             node_id = self.sep_char.join(prefix + (key,))
-            if not value:
-                # This is a leaf element, it was in the initial hierarchy
-                data = prefix + (key,)
-            else:
-                # This is not a leaf element, it was not in the initial hierarchy
-                # it shoudl *not* be returned by the "get_selection" method
-                data = None
             if not self.exists(node_id):
                 self.insert(
                     parent=parent,
                     index="end",
                     iid=node_id,
                     text=key,
-                    values=[data],
-                    open=False,
+                    values=node_id if not value else self.undefined_value,
+                    open=True,
                 )
+                inserted.add(node_id)
             if value:
-                self._rec_insert(value, prefix=prefix + (key,))
+                self._rec_insert(value, prefix=prefix + (key,), inserted=inserted)
+        return inserted
 
     def set_values(self, nested_values):
         selection = self.selection()
-        self.delete(self.get_children())
+        children = list(self.get_children())
+        if children:
+            self.delete(*self.get_children())
         if isinstance(nested_values, Mapping):
-            self._rec_insert(nested_values)
+            new_ids = self._rec_insert(nested_values)
         else:
-            self._rec_insert(self._deepen(nested_values))
-        self.selection_add(selection)
+            new_ids = self._rec_insert(self._deepen(nested_values))
+        common_ids = set(selection) & new_ids
+        if common_ids:
+            self.selection_add(tuple(common_ids))
+        self.adapt_display(len(nested_values))
 
     def get_selection(self):
         # excludes nodes which are "directory" nodes and where not present leaves in the initial input
         return [
-            self.item(item, "values")[0]
+            tuple(self.item(item, "values")[0].split(self.sep_char))
             for item in self.selection()
-            if self.item(item, "values")[0] is not None
+            if self.item(item, "values")[0] != self.undefined_value
         ]
 
     def set_selection(self, nested_values):
@@ -224,13 +242,29 @@ class NestedMultiSelector(MultiSelector):
         If the items is selected/deselected, all its childrens enter the same
             selection state
         """
+        if self.click_job is not None:
+            self.after_cancel(self.click_job)
         item = self.identify("item", event.x, event.y)
         if item:
+            self.click_job = self.after(150, self.clicked, item)
+        return "break"
+    
+    def clicked(self, item):
             if item in self.selection():
                 self.select_clear(item)
             else:
                 self.select_all(item)
-            return "break"
+    
+    def on_double_click(self, event):
+        """
+        Open/Close the item
+        """
+        if self.click_job is not None:
+            self.after_cancel(self.click_job)
+        item = self.identify("item", event.x, event.y)
+        if self.get_children(item):
+            self.item(item, open=not self.item(item, "open"))
+        return "break"
 
     def select_all(self, item=""):
         self.selection_add(item)
@@ -255,30 +289,38 @@ class BaseGUI(ABC):
 
     def __init__(self, title):
         self.root = tk.Tk()
-        self.root.set_title(title)
-        self.left = ttk.Frame(self.root)
-        self.sep = ttk.Separator(self.root)
-        self.right = ttk.Frame(self.root)
+        self.root.title(title)
+        self.top = ttk.Frame(self.root)
+        self.left = ttk.Frame(self.top)
+        self.sep = ttk.Separator(self.top, orient=tk.VERTICAL)
+        self.right = ttk.LabelFrame(self.top, text="Current Assignements")
         self.bottom = ttk.Frame(self.root)
-        self.status = ttk.Label(self.bottom)
+        self.status = ttk.Label(self.bottom, text="This is the status text ! Message appears here")
         self.finish = ttk.Button(self.bottom, text="Finish", command=self.on_closing)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        self.left.pack(side="left", expand=True, fill="both")
-        self.sep.pack(side="left", exapnd=True, fill="y")
-        self.right.pack(side="left", expand=True, fill="both")
+        self.top.pack(side="top", expand=True, fill="both")
+        
+        self.left.grid(row=0, column=0, sticky="nsew")
+        self.sep.grid(row=0, column=1, sticky="ns")
+        self.right.grid(row=0, column=2, sticky="nsew")
+        self.top.grid_columnconfigure(0, weight=1, uniform="columns")
+        self.top.grid_columnconfigure(1, weight=0)
+        self.top.grid_columnconfigure(2, weight=1, uniform="columns")
+        self.top.grid_rowconfigure(0, weight=1)
+        self.bottom.pack(side="bottom", expand=False, fill="x")
         self.status.pack(side="top", expand=True)
         self.finish.pack(side="top", expand=True)
-        self.bottom.pack(side="bottom", expand=True, fill="x")
 
     def on_closing(self, *args, **kwargs):
         try:
             self.on_exit()
         except Exception as err:
-            LOGGER.debug("GUI canceled exit due to %s", utils.err_str(err))
+            LOGGER.debug("GUI canceled exit due to %s", utils.err_str(err)[:-1])
+            LOGGER.debug("Tracebacl:\n%s", utils.err_traceback(err))
             self.status.config(text=utils.err_str(err))
         else:
-            self.root.destroy()
+            self.root.quit()
 
     def run(self):
         self.root.mainloop()
@@ -296,56 +338,58 @@ class PackmodeBaseGUI(BaseGUI, ABC):
 
     def __init__(self, SelectorClass, title, packmodes):
         super().__init__(title)
+        self.num_rows = 3
         self.packmodes = packmodes
         self.SelectorClass = SelectorClass
         # left area
         ## Assignement
-        self.left_top = ttk.Frame(self.left)
-        self.selector_unassigned = SelectorClass(self.left_top, [])
+        self.left_top = ttk.LabelFrame(self.left, text="Unassigned elements")
+        self.selector_unassigned = SelectorClass(master=self.left_top, values=[])
         self.selector_packmode = Dropdown(
-            self.left_top, self.packmodes.keys() | {"server"}, False
+            master=self.left_top,
+            values=self.packmodes.keys() | {"server"},
+            interactive=False
         )
         self.button_assign = ttk.Button(
             self.left_top, text="Assign to -->", command=self.on_assign
         )
-        self.button_assign.pack(side="left", expand="True")
-        self.selector_packmode.pack(side="left", expand="True")
-        self.selector_unassigned.pack(side="top", expand=True, fill="both")
+        self.selector_unassigned.pack(side="left", expand=True, fill="both")
+        self.button_assign.pack(side="left", expand=False)
+        self.selector_packmode.pack(side="left", expand=False)
+        
         ## Packmode creation
-        self.left_bottom = ttk.Frame(self.left)
-        self.selector_dependencies = MultiSelector(self.left_bottom, [])
+        self.left_bottom = ttk.LabelFrame(self.left, text="Add new packmode")
+        self.selector_dependencies = MultiSelector(master=self.left_bottom, values=[])
         self.entry_name = ttk.Entry(self.left_bottom)
         self.button_create = ttk.Button(
             self.left_bottom, text="Add packmode", command=self.on_add
         )
-        self.selector_dependencies.pack(side="left", expand=True)
-        self.entry_name.pack(side="left", expand=True)
-        self.button_create.pack(side="left", expand=True)
+        self.selector_dependencies.pack(side="left", expand=False, fill="y")
+        self.entry_name.pack(side="left", expand=False)
+        self.button_create.pack(side="left", expand=False)
         ## Packing sub-areas
         self.left_top.pack(side="top", expand=True, fill="both")
         self.left_bottom.pack(side="top", expand=True, fill="both")
         # right area
         self.packmode_uis = {
             packmode: self.make_packmode_ui(self.right, packmode)
-            for packmode in self.packmodes.keys() | {"server"}
+            for packmode in (self.packmodes.keys() | {"server"})
         }
         self.button_unassign = ttk.Button(
-            self.left, text="Unassign", command=self.on_unassign
+            self.right, text="Unassign", command=self.on_unassign
         )
-        for ui in self.packmode_uis.values():
-            ui["frame"].pack(side="top")
-        self.button_unassign.pack(side="left")
+        self.button_unassign.grid(row=0, column=0, rowspan=3)
         self.refresh_uis()
 
     def make_packmode_ui(self, parent, packmode_name):
         ui = {}
-        ui["frame"] = ttk.LabelFrame(parent, title=packmode_name)
-        ui["selector"] = self.SelectorClass(ui["frame"], [])
+        ui["frame"] = ttk.LabelFrame(parent, text=packmode_name)
+        ui["selector"] = self.SelectorClass(master=ui["frame"], values=[])
+        ui["selector"].pack(side="top", expand=True, fill="both")
         return ui
 
     def on_add(self):
         name = self.entry_name.get()
-        LOGGER.debug("Creating packmode '%s'", name)
         if name in self.packmodes.keys() | {"server"}:
             self.status.config(text="Packmode '%s' already exists !" % name)
             LOGGER.debug("Couldn't create '%s', it already exists", name)
@@ -362,15 +406,25 @@ class PackmodeBaseGUI(BaseGUI, ABC):
             del self.packmodes[name]
             LOGGER.debug(msg)
             return
-        new_ui = self.make_packmode_ui(self.right, name)
-        new_ui["frame"].pack(side="top")
-        self.packmode_uis[name] = new_ui
+        self.packmode_uis[name] = self.make_packmode_ui(self.right, name)
+        self.entry_name.delete(0, 'end')
         LOGGER.debug("Created packmode '%s'", name)
+        self.refresh_uis()
 
     @abstractmethod
     def refresh_uis(self):
-        self.selector_packmode.set_values(self.packmodes.keys() | {"server"})
-        self.selector_dependencies.set_values(self.packmodes.keys() | {"server"})
+        self.selector_packmode.set_values(sorted(self.packmodes.keys() | {"server"}))
+        self.selector_dependencies.set_values(sorted(self.packmodes.keys() | {"server"}))
+        for packmode, ui in self.packmode_uis.items():
+            ui["frame"].grid_forget()
+        for i, (packmode, ui) in enumerate(sorted(self.packmode_uis.items())):
+            ui["frame"].grid(
+                row=i % self.num_rows,
+                column=1 + (i // self.num_rows),
+                sticky="nsew"
+            )
+            self.right.grid_columnconfigure(1 + (i // self.num_rows), weight=1, uniform="assignement_columns")
+            self.right.grid_rowconfigure(i % self.num_rows, weight=1)
 
     @abstractmethod
     def on_assign(self):
@@ -391,23 +445,23 @@ class ModGUI(PackmodeBaseGUI):
     """
 
     def __init__(self, packmodes, mods):
+        self.mod_list = mods
         super().__init__(
             SelectorClass=MultiSelector, title="Mod assignement UI", packmodes=packmodes
         )
-        self.mod_list = mods
 
     def refresh_uis(self):
         super().refresh_uis()
         self.selector_unassigned.set_values(
-            [mod["name"] for mod in self.mod_list if "packmode" not in mod]
+            sorted([mod["name"] for mod in self.mod_list if "packmode" not in mod])
         )
         for packmode, ui in self.packmode_uis.items():
             ui["selector"].set_values(
-                [
+                sorted([
                     mod["name"]
                     for mod in self.mod_list
                     if mod.get("packmode") == packmode
-                ]
+                ])
             )
 
     def on_assign(self):
@@ -448,11 +502,6 @@ class OverridesGUI(PackmodeBaseGUI):
     """
 
     def __init__(self, packmodes, override_cache, overrides):
-        super().__init__(
-            SelectorClass=NestedMultiSelector,
-            title="Overrides assignment UI",
-            packmodes=packmodes,
-        )
         self.overrides = overrides
         self.override_packmode_map = {
             PurePath(filepath).parts: manifest.get_override_packmode(
@@ -460,6 +509,12 @@ class OverridesGUI(PackmodeBaseGUI):
             )
             for filepath in sorted(override_cache.keys())
         }
+        super().__init__(
+            SelectorClass=NestedMultiSelector,
+            title="Overrides assignment UI",
+            packmodes=packmodes,
+        )
+        
 
     def refresh_uis(self):
         super().refresh_uis()
@@ -520,11 +575,11 @@ class OverridesGUI(PackmodeBaseGUI):
         stack = [filetree]
         while stack:
             node = stack.pop()
-            if isinstance(node, tuple) and node["packmode"] is None:
+            if isinstance(node, tuple) and node[0]["packmode"] is None:
                 # all children have been seen already, assing packmode
                 node = node[0]  # unpack the actual node
                 weights = defaultdict(int)
-                for child in node["children"]:
+                for child in node["children"].values():
                     weights[child["packmode"]] += child["weight"]
                 packmode, weight = max(weights.items(), key=lambda x: x[1])
                 node["weight"] = weight
@@ -536,19 +591,25 @@ class OverridesGUI(PackmodeBaseGUI):
                 for child in node["children"].values():
                     stack.append(child)
 
-    def _write_overrides(self, node, parent_packmode=None, path_parts=tuple()):
+    def _write_overrides(self, node, parent=None, parent_packmode=None, path_parts=tuple(), root=None):
         """
         Uses recursive DFS to write the overrides from a weigthed, assigned file tree
         """
-        if parent_packmode and node["packmode"] != parent_packmode:
+        if root is None:
+            root = node
+        if (parent is root) or (parent_packmode and node["packmode"] != parent_packmode):
             self.overrides[str(PurePath(*path_parts))] = node["packmode"]
         for key, child in node["children"].items():
             self._write_overrides(
-                child, parent_packmode=node["packmode"], path_parts=path_parts + (key,)
+                node=child,
+                parent=node,
+                parent_packmode=node["packmode"],
+                path_parts=path_parts + (key,),
+                root=root
             )
 
     def on_exit(self):
-        if any(self.override_packmode_map.values() is None):
+        if any(v is None for v in self.override_packmode_map.values()):
             raise ValueError("Some overrides don't have a packmode")
         self.status.config(text="Compacting overrides assignemnts ...")
         LOGGER.info("Compacting overrides assignemnts")
@@ -575,9 +636,8 @@ def assign_mods(packmodes, mods):
         the new ('packmodes', 'mods')
     """
     LOGGER.info("Creating GUI for mods assignements")
-    gui = ModGUI(packmodes, mods)
+    gui = ModGUI(deepcopy(packmodes), deepcopy(mods))
     gui.run()
-    raise NotImplementedError("This function needs to be made safe for its arguments")
     return gui.packmodes, gui.mod_list
 
 
@@ -597,7 +657,6 @@ def assign_overrides(packmodes, overrides, override_cache):
         overrides assignements to packmodes
     """
     LOGGER.info("Creating GUI for overrides assignements")
-    gui = OverridesGUI(packmodes, override_cache, overrides)
+    gui = OverridesGUI(deepcopy(packmodes), override_cache, deepcopy(overrides))
     gui.run()
-    raise NotImplementedError("This functions needs to be made safe for its arguments")
     return gui.packmodes, gui.overrides

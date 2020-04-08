@@ -16,7 +16,7 @@ import jsonschema
 # local import
 from . import utils
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("mpm.manifest")
 
 MANIFEST_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -301,7 +301,7 @@ def write_pack_manifest(pack_manifest, filepath: Path):
         filepath -- destination file
     """
     with Path(filepath).open("w") as f:
-        json.dump(pack_manifest, f)
+        json.dump(pack_manifest, f, indent=4)
 
 
 def make_pack_manifest(

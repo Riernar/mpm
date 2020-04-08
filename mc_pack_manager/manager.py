@@ -18,7 +18,7 @@ from . import manifest
 from . import network
 from . import utils
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("mpm.manager")
 DiffObject = namedtuple("DiffObject", ["deleted", "updated", "added"])
 PathLike = Union[str, Path]
 
@@ -36,15 +36,15 @@ def build_new_modlist(pack_manifest, curse_manifest):
         the "mods" property of the pack manifest for the new version. Mods
         not found in pack_manifest *won't* have a packmode "property"
     """
-    LOGGER.info("Building new modlist")
+    LOGGER.info("Building new modlist - this might take a while if mod names needs resolving")
     mod_map = {mod["addonID"]: mod for mod in pack_manifest["mods"]}
     new_mods = []
     for file_data in curse_manifest["files"]:
         addonID = file_data["projectID"]
         mod = {"addonID": addonID, "fileID": file_data["fileID"]}
-        if "packmode" in mod_map[addonID]:
+        if addonID in mod_map and "packmode" in mod_map[addonID]:
             mod["packmode"] = mod_map[addonID]["packmode"]
-        if "name" in mod_map[addonID]:
+        if addonID in mod_map and "name" in mod_map[addonID]:
             mod["name"] = mod_map[addonID]["name"]
         else:
             mod["name"] = network.TwitchAPI.get_addon_info(addonID)["name"]
@@ -82,7 +82,9 @@ def compute_mod_diff(
         updated=updated,
         added=new_addons.keys() - old_addons.keys(),
     )
-
+    LOGGER.info("%s deleted, %s updated, %s added", len(diff.deleted), len(diff.updated), len(diff.added))
+    if loglevel is not None:
+        LOGGER.info("Resolving mod versions. This might take a while")
     sort_key = lambda addonID: old_addons.get(addonID, new_addons.get(addonID))["name"]
     if loglevel is not None and diff.deleted:
         modlist = "\n  - ".join(
@@ -112,7 +114,7 @@ def compute_mod_diff(
             )["fileName"]
             modlist.append("%s (%s)" % (name, version))
         LOGGER.log(
-            loglevel, "The following mods were added:\n - %s", "\n  - ".join(modlist)
+            loglevel, "The following mods were added:\n  - %s", "\n  - ".join(modlist)
         )
     return diff
 
@@ -215,7 +217,7 @@ def apply_override_diff(target_dir, source_dir, diff):
     for path in sorted(diff.added):
         trg_file = target_dir / path
         src_file = source_dir / path
-        trg_file.mkdir(parents=True, exists_ok=True)
+        trg_file.parent.mkdir(parents=True, exist_ok=True)
         try:
             shutil.copyfile(src_file, trg_file)
             LOGGER.debug("Added %s from %s", trg_file, src_file)
@@ -267,10 +269,14 @@ def snapshot(pack_dir: PathLike, curse_zip: PathLike):
         # diffs
         LOGGER.info("Computing diff")
         ## Mods
-        compute_mod_diff(pack_manifest["mods"], new_modlist, loglevel=logging.INFO)
+        compute_mod_diff(
+            old_mods=pack_manifest["mods"], new_mods=new_modlist, loglevel=logging.INFO
+        )
         ## Overrides
         override_diff = compute_override_diff(
-            pack_manifest["mods"], new_modlist, logelevel=logging.INFO
+            old_cache=pack_manifest["override-cache"],
+            new_cache=new_override_cache,
+            logelevel=logging.INFO,
         )
 
         # Packmodes assignements

@@ -11,10 +11,10 @@ import hashlib
 import inspect
 import logging
 from pathlib import Path
-from traceback import format_exception_only
+from traceback import format_exception_only, format_tb
 from typing import TypeVar, Mapping, Iterable, Union, List
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("mpm.utils")
 
 T = TypeVar("T")
 
@@ -221,4 +221,7 @@ def err_str(err):
     """
     Utility function to get a nice str of an Exception for display purposes
     """
-    return "\n".join(format_exception_only(type(err), err))
+    return "".join(format_exception_only(type(err), err))
+
+def err_traceback(err):
+    return "".join(format_tb(err.__traceback__))
