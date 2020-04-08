@@ -33,13 +33,6 @@ MANIFEST_SCHEMA = {
             "required": ["addonID", "fileID", "packmode"],
             "additionalProperties": False,
         },
-        # Definition for a cached override
-        "cached-override": {
-            "type": "object",
-            "properties": {"filepath": {"type": "string"}, "hash": {"type": "string"}},
-            "required": ["filepath", "hash"],
-            "additionalProperties": False,
-        },
     },
     "type": "object",
     "properties": {
@@ -69,15 +62,17 @@ MANIFEST_SCHEMA = {
         "overrides": {
             "type": "object",
             "additionalProperties": {"type": "string"}
-            ## TODO: Path regex && match key pattern to string type
+            ## TODO: Path regex for keys
         },
         # The cache for overrides
-        "overrides-cache": {
-            "type": "array",
-            "item": {"$ref": "#/definitions/cached-override"},
+        # Maps filepath to hash of file
+        "override-cache": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            ## TODO: Path regex for keys
         },
     },
-    "required": ["pack-version", "packmodes", "mods", "overrides-cache",],
+    "required": ["pack-version", "packmodes", "mods", "overrides", "override-cache"],
     "additionalProperties": False,
 }
 
@@ -85,18 +80,10 @@ MANIFEST_SCHEMA = {
 DEFAULT_MANIFEST = {
     "pack-version": "0.0.0",
     "packmodes": {},
-    "overrides-url": "",
     "mods": [],
     "overrides": [],
-    "overrides-cache": [],
+    "override-cache": {},
 }
-
-
-def get_default_manifest():
-    """
-    Returns a new default manifest in JSON
-    """
-    return deepcopy(DEFAULT_MANIFEST)
 
 
 class BaseManifestError(Exception):
@@ -157,6 +144,24 @@ class UndefinedPackmodeError(utils.AutoFormatError, BaseManifestError):
         self.packmode = packmode
 
 
+class UnhandledCurseManifestVersion(utils.AutoFormatError, BaseManifestError):
+    """
+    Exception for unknown curse manifest version
+
+    Attributes
+        version -- unhandled version or None if version was not found
+        message -- error explanation (auto-formatted, see AutoFormatError base class)
+    """
+
+    def __init__(
+        self,
+        version,
+        message="Can handle manifest version {version} for curse manifest file",
+    ):
+        super().__init__(message)
+        self.version = version
+
+
 def validate_dependencies(packmode_dependencies: Mapping[str, Iterable[str]]):
     """
     Validate packmode definitions
@@ -165,9 +170,9 @@ def validate_dependencies(packmode_dependencies: Mapping[str, Iterable[str]]):
         packmode_dependencies -- mapping from packmode names to list of dependencies
             all packmode implicitely depends on "server"
     
-    Raise
+    Raises
         CircularDependencyError -- there is a circular dependency in the packmodes
-        InvalidDependencyError -- a packmode depends on an undefined packmode
+        UndefinedDependencyError -- a packmode depends on an undefined packmode
     """
     all_packmodes = packmode_dependencies.keys() | {"server"}
     graph = {packmode: [] for packmode in all_packmodes}
@@ -215,6 +220,17 @@ def validate_packmode_assignments(pack_manifest):
 
 
 def validate_manifest(pack_manifest):
+    """
+    Validates a manifest, raising an exception if the manifest is invalid
+
+    Arguments
+        pack_manifest -- pack manifest object to validate
+
+    Raises
+        jsonschema.ValidationError -- if the pack manifest doesn't follow the schema
+        CircularDependencyError -- there is a circular dependency in the packmodes
+        UndefinedDependencyError -- a packmode depends on an undefined packmode
+    """
     try:
         jsonschema.validate(instance=pack_manifest, schema=MANIFEST_SCHEMA)
         validate_dependencies(pack_manifest["packmodes"])
@@ -224,19 +240,119 @@ def validate_manifest(pack_manifest):
         raise
 
 
-def read_manifest_file(filepath: Path):
+def get_default_manifest(with_override_url=False):
+    """
+    Returns a new default manifest in JSON
+    """
+    pack_manifest = deepcopy(DEFAULT_MANIFEST)
+    pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
+    if with_override_url:
+        pack_manifest["overrides-url"]: ""
+    return pack_manifest
+
+
+def get_pack_manifest(dir_: Union[str, Path]):
+    """
+    Load the pack-manifest.json file from dir ro defaults to the default manifest
+
+    Arguments
+        dir -- the directory to load the manifest from
+    
+    Return
+        The validated pack_manifest
+    """
+    LOGGER.info("Reading pack-manifest.json from %s", dir_)
+    dir_ = Path(dir_)
+    if not dir_.exists():
+        raise FileNotFoundError(dir_)
+    if dir_.is_file():
+        raise NotADirectoryError(dir_)
+    pack_manifest = dir_ / "pack-manifest.json"
+    if pack_manifest.exists():
+        return read_pack_manifest(pack_manifest)
+    else:
+        LOGGER.info("'pack-manifest.json' not found, using default manifest file")
+        return get_default_manifest()
+
+
+def read_pack_manifest(filepath: Path):
     """
     Retrieve a manifest
 
     Arguments
         filepath -- path to the manifest file
     """
-    LOGGER.debug("Reading pack-manifest file %s", filepath)
     filepath = Path(filepath)
+    LOGGER.info("Reading pack-manifest file %s", filepath)
     with filepath.open() as f:
         pack_manifest = json.load(f)
     validate_manifest(pack_manifest)
+    pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
     return pack_manifest
+
+
+def write_pack_manifest(pack_manifest, filepath: Path):
+    """
+    Write a pack manifest to a file. Doesn't validate it. Use "make_pack_manifest"
+    to ensure you create a proper pack manifest
+
+    Arguments
+        pack_manifest -- pack_manifest to write
+        filepath -- destination file
+    """
+    with Path(filepath).open("w") as f:
+        json.dump(pack_manifest, f)
+
+
+def make_pack_manifest(
+    pack_version: utils.Version,
+    packmodes: Mapping[str, List[str]],
+    mods: List[Mapping[str, str]],
+    overrides: Mapping[str, str],
+    override_cache: Mapping[str, str],
+    *,
+    current_packmodes: List[str] = None,
+    overrides_url: str = None
+):
+    """
+    Creates and validates a new pack manifest
+
+    Arguments:
+        See the json schema MANIFEST_SCHEMA for the schema of a pack manifest
+    
+    Returns
+        A new, validated pack manifest
+    
+    Raises
+        See validate_pack_manifest()
+    """
+    LOGGER.info("Creating new pack manifest")
+    pack_manifest = {"pack-version": str(pack_version), "packmodes": packmodes}
+    if current_packmodes:
+        pack_manifest["current-packmodes"] = current_packmodes
+    if overrides_url:
+        pack_manifest["overrides-url"] = overrides_url
+    pack_manifest.update(
+        {"mods": mods, "overrides": overrides, "override-cache": override_cache}
+    )
+    validate_manifest(pack_manifest)
+    return pack_manifest
+
+
+def read_curse_manifest(filepath: Union[str, Path]):
+    """
+    Read a curse manifest file
+
+    Arguments:
+        filepath -- file to the json manifest to read
+    """
+    filepath = Path(filepath)
+    LOGGER.info("Reading curse manifest file %s", filepath)
+    with filepath.open() as f:
+        curse_manifest = json.load(f)
+    if curse_manifest.get("manifestVersion") != 1:
+        raise UnhandledCurseManifestVersion(curse_manifest.get("manifestVersion"))
+    return curse_manifest
 
 
 def get_override_packmode(

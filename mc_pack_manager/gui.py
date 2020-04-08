@@ -447,7 +447,7 @@ class OverridesGUI(PackmodeBaseGUI):
     GUI for assigning overrides to packmodes
     """
 
-    def __init__(self, packmodes, overrides_cache, overrides):
+    def __init__(self, packmodes, override_cache, overrides):
         super().__init__(
             SelectorClass=NestedMultiSelector,
             title="Overrides assignment UI",
@@ -455,12 +455,10 @@ class OverridesGUI(PackmodeBaseGUI):
         )
         self.overrides = overrides
         self.override_packmode_map = {
-            PurePath(entry["filepath"]).parts: manifest.get_override_packmode(
-                overrides, entry["filepath"]
+            PurePath(filepath).parts: manifest.get_override_packmode(
+                overrides, filepath
             )
-            for entry in sorted(
-                overrides_cache, key=lambda override: override["filepath"]
-            )
+            for filepath in sorted(override_cache.keys())
         }
 
     def refresh_uis(self):
@@ -579,10 +577,11 @@ def assign_mods(packmodes, mods):
     LOGGER.info("Creating GUI for mods assignements")
     gui = ModGUI(packmodes, mods)
     gui.run()
+    raise NotImplementedError("This function needs to be made safe for its arguments")
     return gui.packmodes, gui.mod_list
 
 
-def assign_overrides(packmodes, overrides, overrides_cache):
+def assign_overrides(packmodes, overrides, override_cache):
     """
     Assign overrides to packmodes using a GUI, and compact
     assignment
@@ -590,7 +589,7 @@ def assign_overrides(packmodes, overrides, overrides_cache):
     Arguments
         packmodes -- "packmodes" property of a pack_manifest, the packmodes definitions
         overrides -- "overrides" property of a pack_manifest, overrides assignemnts to packmodes
-        overrides-cache -- "overrides-cache" property of a pack_manifest, list of overrides filepath and hash
+        override_cache -- "overrides-cache" property of a pack_manifest, list of overrides filepath and hash
     
     Returns
         (packmodes, overrides)
@@ -598,6 +597,7 @@ def assign_overrides(packmodes, overrides, overrides_cache):
         overrides assignements to packmodes
     """
     LOGGER.info("Creating GUI for overrides assignements")
-    gui = OverridesGUI(packmodes, overrides_cache, overrides)
+    gui = OverridesGUI(packmodes, override_cache, overrides)
     gui.run()
+    raise NotImplementedError("This functions needs to be made safe for its arguments")
     return gui.packmodes, gui.overrides

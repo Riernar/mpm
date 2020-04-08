@@ -6,6 +6,7 @@ from pathlib import Path
 # Local imports
 import mc_pack_manager as mpm
 
+LOGGER = logging.getLogger(__name__)
 
 FILE_FORMAT = "[{asctime}][{name}][{funcName}][{levelname}] {message}"
 CONSOLE_FORMAT = "[{name}][{levelname}] {message}"
@@ -33,3 +34,49 @@ def configure_logging(log_file: Path = "mc-pack-manager.log"):
     # Attach to module logger
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Minecraft Pack Manager -- Helps managae minecraft modpacks")
+    subparsers = parser.add_subparsers(dest="command", required=True, help="subcommands help")
+
+    # Snapshot subcommand
+    snapshot_parser = subparsers.add_parser(
+        "snapshot",
+        help="snapshot help"
+    )
+    snapshot_parser.description = "Creates more advanced modpack representation on top of curse representation"
+    snapshot_parser.add_argument(
+        "pack_dir",
+        type=Path,
+        help="Local dir in which to build or update the modpack representation"
+    )
+    snapshot_parser.add_argument(
+        "curse_zip",
+        type=Path,
+        help="path to the zip file exported by curse/twitch app"
+    )
+
+    # Argument parsing
+    args = parser.parse_args()
+    print(args)
+
+    # Logging config
+    configure_logging()
+
+    # Command selection
+    try:
+        if args.command == "snapshot":
+            mpm.manager.snapshot(
+                pack_dir=args.pack_dir,
+                curse_zip=args.curse_zip
+            )
+    
+    except Exception as err:
+        LOGGER.exception(
+            "Minecraft Pack Manager encountered an exception:\n%s", mpm.utils.err_str(err)
+        )
+        print(
+            "An exception occured, see above. Exceptions are not yet handled in MPM, so this might be because of wrong argument.\n"
+            "The exception is: %s" % mpm.utils.err_str(err)
+        )
+
