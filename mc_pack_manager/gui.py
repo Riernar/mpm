@@ -37,7 +37,7 @@ class Dropdown(ttk.Combobox):
     def set_values(self, values):
         selected = self.get()
         values = list(values)
-        self.config(values=values)
+        self.configure(values=values, width=max(len(str(v)) for v in values) + 1)
         self.set(selected if selected in values else values[0])
 
 
@@ -52,14 +52,15 @@ class MultiSelector(ttk.Treeview):
             *args,
             master=self.frame_,
             show="tree",
-            columns=["cache"],
+            columns=[],
             height=max(3, min(len(values), height)),
             **kwargs
         )
         self.height_arg = height
         self.min_height_arg = min_height
-        self.column("cache", width=0, minwidth=0, stretch=False)
+        # self.column("cache", width=0, minwidth=0, stretch=False)
         self.bind("<1>", self.on_click)
+        # Under buttons
         self.button_frame = ttk.Frame(master=self.frame_)
         self.button_all = ttk.Button(
             master=self.button_frame, text="All", command=self.select_all
@@ -80,6 +81,7 @@ class MultiSelector(ttk.Treeview):
         self.configure(yscrollcommand=self.scrollbar_.set)
         self.scrollbar_.pack(side="right", expand=False, fill="y")
         self.pack(side="left", expand=True, fill="both")
+        self.id_value_map = {}
         self.set_values(values)
         self.pack = self.frame_.pack
         self.grid = self.frame_.grid
@@ -92,8 +94,9 @@ class MultiSelector(ttk.Treeview):
         selection = set(self.get_selection())
         self.select_clear()
         self.delete(*self.get_children())
-        for value in values:
-            self.insert("", "end", text=str(value), values=(value,))
+        self.id_value_map = {
+            self.insert("", "end", text=str(value)): value for value in values
+        }
         self.set_selection(selection & set(values))
         self.adapt_display(len(values))
 
@@ -101,18 +104,18 @@ class MultiSelector(ttk.Treeview):
         """
         Returns the selected element from the `values` passed to `__init__()`
         """
-        return [self.item(item, "values")[0] for item in self.selection()]
+        return [
+            self.id_value_map[item]
+            for item in self.selection()
+            if item in self.id_value_map
+        ]
 
     def set_selection(self, values):
         """
         Set the current selection from a subset of 'values' passed to __init__
         """
         self.selection_set(
-            [
-                item
-                for item in self.get_children()
-                if self.item(item, "values")[0] in values
-            ]
+            [item for item in self.get_children() if self.id_value_map[item] in values]
         )
 
     def on_click(self, event):
@@ -149,7 +152,7 @@ class MultiSelector(ttk.Treeview):
 
 class NestedMultiSelector(MultiSelector):
     """
-    Widget for multiselection with nested structures, such a file hierarchy
+    Widget for multiselection with nested structures, such as a file hierarchy
     """
 
     sep_char = "/"
@@ -161,8 +164,7 @@ class NestedMultiSelector(MultiSelector):
             master -- parent widget
             values -- nested structure to select from. Either:
                 - a nested dict, with key mapping to all sub-elements and leaves ammped to '{}'
-                - an iterable of items, where item an item is the path from the root
-                    to the last element
+                - an iterable of tuples, where an inner iterable represents a path from root to element
         """
         super().__init__(
             master, values, *args, height=height, min_height=min_height, **kwargs
@@ -189,52 +191,46 @@ class NestedMultiSelector(MultiSelector):
                 node = node.setdefault(value, {})
         return nested_mapping
 
-    def _rec_insert(self, mapping, prefix=tuple(), inserted=None):
-        parent = self.sep_char.join(prefix)
-        if inserted is None:
-            inserted = set()
+    def _rec_insert(self, mapping, prefix=tuple(), parent=""):
         for key, value in mapping.items():
-            node_id = self.sep_char.join(prefix + (key,))
-            if not self.exists(node_id):
-                self.insert(
-                    parent=parent,
-                    index="end",
-                    iid=node_id,
-                    text=key,
-                    values=node_id if not value else self.undefined_value,
-                    open=True,
-                )
-                inserted.add(node_id)
+            item = self.insert(parent=parent, index="end", text=str(key), open=True,)
             if value:
-                self._rec_insert(value, prefix=prefix + (key,), inserted=inserted)
-        return inserted
+                self._rec_insert(value, prefix=prefix + (key,), parent=item)
+            else:
+                self.id_value_map[item] = prefix + (key,)
 
     def set_values(self, nested_values):
-        selection = self.selection()
-        children = list(self.get_children())
-        if children:
+        selection = self.get_selection()
+        if self.get_children():
             self.delete(*self.get_children())
+        self.id_value_map = {}
         if isinstance(nested_values, Mapping):
-            new_ids = self._rec_insert(nested_values)
+            self._rec_insert(nested_values)
         else:
-            new_ids = self._rec_insert(self._deepen(nested_values))
-        common_ids = set(selection) & new_ids
-        if common_ids:
-            self.selection_add(tuple(common_ids))
+            self._rec_insert(self._deepen(nested_values))
+        self.selection_add(
+            [item for item, value in self.id_value_map.items() if value in selection]
+        )
         self.adapt_display(len(nested_values))
 
     def get_selection(self):
         # excludes nodes which are "directory" nodes and where not present leaves in the initial input
         return [
-            tuple(self.item(item, "values")[0].split(self.sep_char))
+            self.id_value_map[item]
             for item in self.selection()
-            if self.item(item, "values")[0] != self.undefined_value
+            if item in self.id_value_map
         ]
 
     def set_selection(self, nested_values):
         if isinstance(nested_values, Mapping):
             nested_values = self._flatten_dfs(nested_values)
-        self.selection_set([self.sep_char.join(element) for element in nested_values])
+        self.selection_set(
+            [
+                item
+                for item, value in self.id_value_map.items()
+                if value in nested_values
+            ]
+        )
 
     def on_click(self, event):
         """
@@ -411,6 +407,7 @@ class PackmodeBaseGUI(BaseGUI, ABC):
             return
         self.packmode_uis[name] = self.make_packmode_ui(self.right, name)
         self.entry_name.delete(0, "end")
+        self.selector_dependencies.select_clear()
         LOGGER.debug("Created packmode '%s'", name)
         self.refresh_uis()
 
@@ -508,12 +505,14 @@ class OverridesGUI(PackmodeBaseGUI):
     GUI for assigning overrides to packmodes
     """
 
-    def __init__(self, packmodes, override_cache, overrides):
+    def __init__(self, packmodes, override_cache, overrides, added=set()):
         self.overrides = overrides
         self.override_packmode_map = {
             PurePath(filepath).parts: manifest.get_override_packmode(
                 overrides, filepath
             )
+            if filepath not in added
+            else None
             for filepath in sorted(override_cache.keys())
         }
         super().__init__(
@@ -526,16 +525,16 @@ class OverridesGUI(PackmodeBaseGUI):
         super().refresh_uis()
         self.selector_unassigned.set_values(
             [
-                filepath
-                for filepath, packmode in self.override_packmode_map.items()
+                pathparts
+                for pathparts, packmode in self.override_packmode_map.items()
                 if packmode is None
             ]
         )
         for key, ui in self.packmode_uis.items():
             ui["selector"].set_values(
                 [
-                    filepath
-                    for filepath, packmode in self.override_packmode_map.items()
+                    pathparts
+                    for pathparts, packmode in self.override_packmode_map.items()
                     if packmode == key
                 ]
             )

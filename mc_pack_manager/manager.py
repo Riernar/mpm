@@ -36,10 +36,24 @@ def build_new_modlist(pack_manifest, curse_manifest):
         the "mods" property of the pack manifest for the new version. Mods
         not found in pack_manifest *won't* have a packmode "property"
     """
-    LOGGER.info(
-        "Building new modlist - this might take a while if mod names needs resolving"
-    )
+    LOGGER.info("Building new modlist")
     mod_map = {mod["addonID"]: mod for mod in pack_manifest["mods"]}
+    LOGGER.info(
+        "%s mods needs resolving, this might take a while",
+        sum(
+            1
+            for fd in curse_manifest["files"]
+            if (
+                fd["projectID"] not in mod_map
+                or "name" not in mod_map[fd["projectID"]]
+                or mod_map[fd["projectID"]]["fileID"] != fd["fileID"]
+                or (
+                    mod_map[fd["projectID"]]["fileID"] == fd["fileID"]
+                    and "filename" not in mod_map[fd["projectID"]]
+                )
+            )
+        ),
+    )
     new_mods = []
     for file_data in curse_manifest["files"]:
         addonID = file_data["projectID"]
@@ -50,6 +64,16 @@ def build_new_modlist(pack_manifest, curse_manifest):
             mod["name"] = mod_map[addonID]["name"]
         else:
             mod["name"] = network.TwitchAPI.get_addon_info(addonID)["name"]
+        if (
+            addonID in mod_map
+            and mod_map[addonID]["fileID"] == mod["fileID"]
+            and "filename" in mod_map[addonID]
+        ):
+            mod["filename"] = mod_map[addonID]["filename"]
+        else:
+            mod["filename"] = network.TwitchAPI.get_file_info(addonID, mod["fileID"])[
+                "fileName"
+            ]
         new_mods.append(mod)
     return new_mods
 
@@ -90,8 +114,6 @@ def compute_mod_diff(
         len(diff.updated),
         len(diff.added),
     )
-    if loglevel is not None:
-        LOGGER.info("Resolving mod versions. This might take a while")
     sort_key = lambda addonID: old_addons.get(addonID, new_addons.get(addonID))["name"]
     if loglevel is not None and diff.deleted:
         modlist = "\n  - ".join(
@@ -102,12 +124,20 @@ def compute_mod_diff(
         modlist = []
         for addonID in sorted(diff.updated, key=sort_key):
             name = old_addons[addonID]["name"]
-            old_version = network.TwitchAPI.get_file_info(
-                addonID, old_addons[addonID]["fileID"]
-            )["fileName"]
-            new_version = network.TwitchAPI.get_file_info(
-                addonID, new_addons[addonID]["fileID"]
-            )["fileName"]
+            old_version = (
+                old_addons[addonID]["filename"]
+                if "filename" in old_addons[addonID]
+                else network.TwitchAPI.get_file_info(
+                    addonID, old_addons[addonID]["fileID"]
+                )["fileName"]
+            )
+            new_version = (
+                new_addons[addonID]["filename"]
+                if "filename" in new_addons[addonID]
+                else network.TwitchAPI.get_file_info(
+                    addonID, new_addons[addonID]["fileID"]
+                )["fileName"]
+            )
             modlist.append("%s (%s -> %s)" % (name, old_version, new_version))
         LOGGER.log(
             loglevel, "The following mods were updated:\n  - %s", "\n  - ".join(modlist)
@@ -116,9 +146,13 @@ def compute_mod_diff(
         modlist = []
         for addonID in sorted(diff.added, key=sort_key):
             name = new_addons[addonID]["name"]
-            version = network.TwitchAPI.get_file_info(
-                addonID, new_addons[addonID]["fileID"]
-            )["fileName"]
+            version = (
+                new_addons[addonID]["filename"]
+                if "filename" in new_addons[addonID]
+                else network.TwitchAPI.get_file_info(
+                    addonID, new_addons[addonID]["fileID"]
+                )["fileName"]
+            )
             modlist.append("%s (%s)" % (name, version))
         LOGGER.log(
             loglevel, "The following mods were added:\n  - %s", "\n  - ".join(modlist)

@@ -29,6 +29,7 @@ MANIFEST_SCHEMA = {
                 "fileID": {"type": "integer"},
                 "packmode": {"type": "string"},
                 "name": {"type": "string"},
+                "filename": {"type": "string"},
             },
             "required": ["addonID", "fileID", "packmode"],
             "additionalProperties": False,
