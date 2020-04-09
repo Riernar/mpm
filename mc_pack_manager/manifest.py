@@ -292,6 +292,22 @@ def read_pack_manifest(filepath: Path):
     return pack_manifest
 
 
+def check_packmodes(packmodes, packmode_list):
+    """
+    Check that the packmodes are defined
+
+    Arguments
+        packmodes -- packmodes definition of a pack manifest
+        packmode_list -- packmode to verify
+    
+    Raises
+        ValueError if some packmodes are undefined
+    """
+    undefined = set(packmode_list) - (packmodes.keys() | {"server"})
+    if undefined:
+        raise ValueError("Undefined packmodes %s", undefined)
+
+
 def write_pack_manifest(pack_manifest, filepath: Path):
     """
     Write a pack manifest to a file. Doesn't validate it. Use "make_pack_manifest"
@@ -381,3 +397,71 @@ def get_override_packmode(
             key = str(relpath.parents[i])
             if key in overrides:
                 return overrides[key]
+
+
+def get_all_dependencies(packmodes, packmode_list):
+    """
+    Returns the set of packmodes to include when selecting packmode_list
+
+    Arguments
+        packmodes -- packmodes definition of a pack_manifest object
+        packmode_list -- list of selected packmodes
+
+    Returns
+        set of packmode_list and all their dependencies
+    """
+    check_packmodes(packmodes, packmode_list)
+    packmodes = {"server"}
+    stack = list(packmode_list)
+    while stack:
+        pkm = stack.pop()
+        if pkm not in packmodes:
+            packmodes.add(pkm)
+            for dep in packmodes[pkm]:
+                stack.append(dep)
+    return packmodes
+
+
+def get_selected_mods(pack_manifest, packmode_list):
+    """
+    Returns the list of mods that should be includes given the selected packmodes
+
+    Arguments
+        pack_manifest -- pack_manifest object
+        packmode_list -- list of selected packmodes
+    
+    Returns
+        The subset of pack_manifest["mods"] that belong to the selected packmodes or
+            their dependencies
+    """
+    LOGGER.info("Selecting mods for packmodes %s", ", ".join(sorted(packmode_list)))
+    return [
+        mod.copy()
+        for mod in pack_manifest["mods"]
+        if mod["packmode"]
+        in get_all_dependencies(pack_manifest["packmodes"], packmode_list)
+    ]
+
+
+def get_selected_overrides(pack_manifest, packmode_list):
+    """
+    Returns the list of selected overrides
+
+    Arguments
+        pack_manifest -- pack manifest object to select overrides from
+        packmode_list -- list of packmodes to include
+
+    Returns
+        a subset of pack_manifest["override-cache"] that belong to the provided packmodes
+            of their dependencies
+    """
+    LOGGER.info(
+        "Selecting overrides for packmodes %s", ", ".join(sorted(packmode_list))
+    )
+    get_packmode = lambda path: get_override_packmode(pack_manifest["overrides"], path)
+    return {
+        filepath: hsh
+        for filepath, hsh in pack_manifest["override-cache"].items()
+        if get_packmode(filepath)
+        in get_all_dependencies(pack_manifest["packmodes"], packmode_list)
+    }

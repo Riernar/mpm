@@ -5,6 +5,7 @@ Main interface
 """
 # Standard library imports
 from collections import namedtuple, OrderedDict
+import json
 import logging
 from pathlib import Path, PurePath
 import shutil
@@ -21,6 +22,38 @@ from . import utils
 LOGGER = logging.getLogger("mpm.manager")
 DiffObject = namedtuple("DiffObject", ["deleted", "updated", "added"])
 PathLike = Union[str, Path]
+
+
+def format_modlist(modlist, print_version=False, old_modlist=None, old_modmap=None):
+    """
+    Formats a list of mods for logging
+
+    Arguments
+        modlist -- list of mods to format
+        print_version -- adds the mod filename to the print
+        old_modlist -- list of mods in a previous version. Ignored if old_modmap is provided
+        old_modmap -- mapping from addonID to mods, for old version. Provides this if you already have it
+    
+    Returns
+        A single string, the list of formatted mods ready for printing
+    """
+    SEP = "  - "
+    if old_modlist and old_modmap is None:
+        old_modmap = {mod["addonID"]: mod for mod in old_modlist}
+    fmods = []
+    sort_key = lambda mod: mod["name"]
+    for mod in sorted(modlist, key=sort_key):
+        fmod = mod["name"]
+        if print_version:
+            if old_modmap is None:
+                fmod += " (%s)" % mod.get("filename", "UNRESOLVED")
+            else:
+                fmod += " (%s -> %s)" % (
+                    old_modmap.get(mod["addonID"], {}).get("filename"),
+                    mod.get("filename", "UNRESOLVED"),
+                )
+        fmods.append(fmod)
+    return SEP + ("\n" + SEP).join(fmods)
 
 
 def build_new_modlist(pack_manifest, curse_manifest):
@@ -116,46 +149,28 @@ def compute_mod_diff(
     )
     sort_key = lambda addonID: old_addons.get(addonID, new_addons.get(addonID))["name"]
     if loglevel is not None and diff.deleted:
-        modlist = "\n  - ".join(
-            sort_key(addonID) for addonID in sorted(diff.deleted, key=sort_key)
-        )
-        LOGGER.log(loglevel, "The following mods were deleted:\n  - %s", modlist)
-    if loglevel is not None and diff.updated:
-        modlist = []
-        for addonID in sorted(diff.updated, key=sort_key):
-            name = old_addons[addonID]["name"]
-            old_version = (
-                old_addons[addonID]["filename"]
-                if "filename" in old_addons[addonID]
-                else network.TwitchAPI.get_file_info(
-                    addonID, old_addons[addonID]["fileID"]
-                )["fileName"]
-            )
-            new_version = (
-                new_addons[addonID]["filename"]
-                if "filename" in new_addons[addonID]
-                else network.TwitchAPI.get_file_info(
-                    addonID, new_addons[addonID]["fileID"]
-                )["fileName"]
-            )
-            modlist.append("%s (%s -> %s)" % (name, old_version, new_version))
         LOGGER.log(
-            loglevel, "The following mods were updated:\n  - %s", "\n  - ".join(modlist)
+            loglevel,
+            "The following mods were deleted:\n%s",
+            format_modlist([old_addons[addonID] for addonID in diff.deleted]),
+        )
+    if loglevel is not None and diff.updated:
+        LOGGER.log(
+            loglevel,
+            "The following mods were updated:\n%s",
+            format_modlist(
+                modlist=[new_addons[addonID] for addonID in diff.updated],
+                old_modmap=old_addons,
+                print_version=True,
+            ),
         )
     if loglevel is not None and diff.added:
-        modlist = []
-        for addonID in sorted(diff.added, key=sort_key):
-            name = new_addons[addonID]["name"]
-            version = (
-                new_addons[addonID]["filename"]
-                if "filename" in new_addons[addonID]
-                else network.TwitchAPI.get_file_info(
-                    addonID, new_addons[addonID]["fileID"]
-                )["fileName"]
-            )
-            modlist.append("%s (%s)" % (name, version))
         LOGGER.log(
-            loglevel, "The following mods were added:\n  - %s", "\n  - ".join(modlist)
+            loglevel,
+            "The following mods were added:%s",
+            format_modlist(
+                [new_addons[addonID] for addonID in diff.added], print_version=True
+            ),
         )
     return diff
 
@@ -372,20 +387,66 @@ def snapshot(pack_dir: PathLike, curse_zip: PathLike):
         manifest.write_pack_manifest(new_pack_manifest, pack_dir / "pack-manifest.json")
 
     LOGGER.info("Deleting temporary dir %s", temp_dir)
+    LOGGER.info("Done !")
 
 
-def release_mpm():
+def check_snapshot_dir(pack_dir: PathLike):
+    """
+    Overly simple check that a directory is a snapshot dir
+    """
+    if not pack_dir.exists():
+        raise FileNotFoundError(pack_dir)
+    if not pack_dir.is_dir():
+        raise NotADirectoryError(pack_dir)
+    if not (pack_dir / "pack-manifest.json").is_file():
+        raise FileNotFoundError(
+            "No pack-manifest.json file found in %s. Is this really a snapshot directory ?"
+            % pack_dir
+        )
+    if not (pack_dir / "manifest.json").is_file():
+        raise FileNotFoundError(
+            "No manifest.json file found in %s. Is this really a snapshot directory ?"
+            % pack_dir
+        )
+    if not (pack_dir / "overrides").is_dir():
+        raise FileNotFoundError(
+            "No overrides/ directory found in %s. Is this really a snapshot directory ?"
+            % pack_dir
+        )
+
+
+def release_mpm(pack_dir: PathLike, output_file: PathLike, force=False):
     """
     Creates a .zip useable by the update functionnality of the pack manager
 
     Arguments
         pack_dir -- local dir containing the pack manager's modpack representation (see snapshot())
         output_file -- path to the output file to produce
+        force -- erase output_file if it already exists
     """
-    raise NotImplementedError
+    pack_dir = Path(pack_dir)
+    output_file = Path(output_file)
+    check_snapshot_dir(pack_dir)
+    LOGGER.info("Creating mpm release in %s", output_file)
+    with zipfile.ZipFile(
+        output_file,
+        mode="w" if force else "x",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=6,
+    ) as archive:
+        for element in pack_dir.rglob("*"):
+            if element.is_file():
+                archive.write(filename=element, arcname=element.relative_to(pack_dir))
+    LOGGER.info("Done !")
 
 
-def release_curse():
+def release_curse(
+    pack_dir: PathLike,
+    output_zip: PathLike,
+    packmodes=None,
+    force=False,
+    include_mpm=False,
+):
     """
     Creates a .zip of the same format as curse/twitch that can be used to do a fresh install
         of the pack. This will *not* contain mods, but creates a manifest that list them (same
@@ -394,10 +455,81 @@ def release_curse():
     Arguments
         pack_dir -- local dir containing the pack manager's modpack representation (see snapshot())
         output_file -- path to the output file to produce
-        packmodes -- list of packmodes to include into the created .zip. Can be "ALL" to include them all
+        packmodes -- list of packmodes to include into the created .zip. Defaults to everything
+        force -- erase output_zip if it already exists
         include_mpm -- bundle this pack manager into the .zip, so that it is part of the pack
     """
-    raise NotImplementedError
+    # File checks and opening
+    pack_dir = Path(pack_dir)
+    output_zip = Path(output_zip)
+    check_snapshot_dir(pack_dir)
+    # Read manifest
+    pack_manifest = manifest.get_pack_manifest(pack_dir)
+    curse_manifest = manifest.read_curse_manifest(pack_dir / "manifest.json")
+    # Check packmodes
+    if packmodes:
+        manifest.check_packmodes(pack_manifest["packmodes"], packmodes)
+    # Open zip archive
+    LOGGER.info("Opening .zip file")
+    archive = zipfile.ZipFile(
+        output_zip,
+        mode="w" if force else "x",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=6,
+    )
+    # Compute mods
+    if not packmodes:
+        LOGGER.info("No 'packmodes' argument, using all packmodes")
+        selected_mods = pack_manifest["mods"]
+    else:
+        selected_mods = manifest.get_selected_mods(pack_manifest, packmodes)
+    LOGGER.debug(
+        "Selected mods:\n%s", format_modlist(selected_mods, print_version=True)
+    )
+    # Create new manifest
+    LOGGER.info("Generating new manifest")
+    curse_manifest["files"] = [
+        {"projectID": mod["addonID"], "fileID": mod["fileID"], "required": True}
+        for mod in selected_mods
+    ]
+    curse_manifest["version"] = str(pack_manifest["pack-version"])
+    curse_manifest["overrides"] = "overrides"
+    with archive.open("manifest.json", mode="w") as f:
+        f.write(json.dumps(curse_manifest, indent=4).encode("utf-8"))
+    # Compute overrides
+    if not packmodes:
+        LOGGER.info("No 'packmodes' argument, using all overrides")
+        selected_overrides = pack_manifest["override-cache"]
+    else:
+        selected_overrides = manifest.get_selected_overrides(pack_manifest, packmodes)
+    LOGGER.debug(
+        "Selected overrides:\n  - %s",
+        "\n  - ".join(selected_overrides.keys()),
+    )
+    # Compress overrides
+    LOGGER.info("Adding selected overrides to .zip archive")
+    for filepath in selected_overrides.keys():
+        path = pack_dir / "overrides" / filepath
+        archive.write(filename=path, arcname=path.relative_to(pack_dir))
+    # Includes extra files (e.g. modlist)
+    LOGGER.info("Adding extra modpack files to .zip archives")
+    for extra in pack_dir.glob("*"):
+        if extra.is_file() and extra.name not in (
+            "manifest.json",
+            "pack-manifest.json",
+        ):
+            archive.write(filename=extra, arcname=extra.relative_to(pack_dir))
+        elif extra.is_dir() and extra.stem != "overrides":
+            for sub_extra in extra.rglob("*"):
+                archive.write(
+                    filename=sub_extra, arcname=sub_extra.relative_to(pack_dir)
+                )
+    ## Include MPM
+    if include_mpm:
+        LOGGER.info("Adding mpm to .zip archive")
+        LOGGER.fatal("ADDING MPM IS NOT YET SUPPORTED !")
+    archive.close()
+    LOGGER.info("Done !")
 
 
 def release_zip():
