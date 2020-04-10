@@ -119,12 +119,12 @@ if __name__ == "__main__":
     # Command selection
     try:
         if args.command == "snapshot":
-            mpm.manager.snapshot(pack_dir=args.pack_dir, curse_zip=args.curse_zip)
+            mpm.manager.snapshot.snapshot(pack_dir=args.pack_dir, curse_zip=args.curse_zip)
         elif args.command == "release":
             if args.release_type == "mpm":
-                mpm.manager.release_mpm(pack_dir=args.pack_dir, output_file=args.output_zip, force=args.force)
+                mpm.manager.release.mpm(pack_dir=args.pack_dir, output_file=args.output_zip, force=args.force)
             elif args.release_type == "curse":
-                mpm.manager.release_curse(
+                mpm.manager.release.curse(
                     pack_dir=args.pack_dir,
                     output_zip=args.output_zip,
                     packmodes=args.packmodes,

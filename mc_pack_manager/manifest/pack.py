@@ -1,22 +1,25 @@
 """
-Part of the Minecraft Pack Manager utility (mpm)
+Pack manifest module
 
-Module for creating and reading pack and curse manifest
+Part of the Minecraft Pack Manager utility (mpm)
 """
-# standard library
+# Standard library import
 from copy import deepcopy
 import json
 import logging
 from pathlib import Path
-from typing import List, Mapping, Iterable, Union
+from typing import Iterable, List, Mapping, Union
 
-# third parties
+# Third party library import
 import jsonschema
 
-# local import
-from . import utils
+# Local import
+from .. import utils
+from ..manifest import common
 
-LOGGER = logging.getLogger("mpm.manifest")
+PathLike = Union[str, Path]
+
+LOGGER = logging.getLogger("mpm.manifest.pack")
 
 MANIFEST_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -87,13 +90,7 @@ DEFAULT_MANIFEST = {
 }
 
 
-class BaseManifestError(Exception):
-    """
-    Base manifest error
-    """
-
-
-class CircularDependencyError(utils.AutoFormatError, BaseManifestError):
+class CircularDependencyError(utils.AutoFormatError, common.BaseManifestError):
     """
     Exception for circular dependency in packmodes
 
@@ -108,7 +105,7 @@ class CircularDependencyError(utils.AutoFormatError, BaseManifestError):
         self.message = message
 
 
-class UndefinedDependencyError(utils.AutoFormatError, BaseManifestError):
+class UndefinedDependencyError(utils.AutoFormatError, common.BaseManifestError):
     """
     Exception for packmode depending on undefined packmode
 
@@ -129,7 +126,7 @@ class UndefinedDependencyError(utils.AutoFormatError, BaseManifestError):
         self.dependency = dependency
 
 
-class UndefinedPackmodeError(utils.AutoFormatError, BaseManifestError):
+class UndefinedPackmodeError(utils.AutoFormatError, common.BaseManifestError):
     """
     Exception for undefined packmode
 
@@ -143,24 +140,6 @@ class UndefinedPackmodeError(utils.AutoFormatError, BaseManifestError):
         super().__init__(message)
         self.source = source
         self.packmode = packmode
-
-
-class UnhandledCurseManifestVersion(utils.AutoFormatError, BaseManifestError):
-    """
-    Exception for unknown curse manifest version
-
-    Attributes
-        version -- unhandled version or None if version was not found
-        message -- error explanation (auto-formatted, see AutoFormatError base class)
-    """
-
-    def __init__(
-        self,
-        version,
-        message="Can handle manifest version {version} for curse manifest file",
-    ):
-        super().__init__(message)
-        self.version = version
 
 
 def validate_dependencies(packmode_dependencies: Mapping[str, Iterable[str]]):
@@ -220,7 +199,7 @@ def validate_packmode_assignments(pack_manifest):
             pass
 
 
-def validate_manifest(pack_manifest):
+def validate(pack_manifest):
     """
     Validates a manifest, raising an exception if the manifest is invalid
 
@@ -241,7 +220,7 @@ def validate_manifest(pack_manifest):
         raise
 
 
-def get_default_manifest(with_override_url=False):
+def get_default(with_override_url: bool = False):
     """
     Returns a new default manifest in JSON
     """
@@ -252,7 +231,7 @@ def get_default_manifest(with_override_url=False):
     return pack_manifest
 
 
-def get_pack_manifest(dir_: Union[str, Path]):
+def load_from(dir_: Union[str, Path]):
     """
     Load the pack-manifest.json file from dir ro defaults to the default manifest
 
@@ -270,13 +249,13 @@ def get_pack_manifest(dir_: Union[str, Path]):
         raise NotADirectoryError(dir_)
     pack_manifest = dir_ / "pack-manifest.json"
     if pack_manifest.exists():
-        return read_pack_manifest(pack_manifest)
+        return read(pack_manifest)
     else:
         LOGGER.info("'pack-manifest.json' not found, using default manifest file")
-        return get_default_manifest()
+        return get_default()
 
 
-def read_pack_manifest(filepath: Path):
+def read(filepath: PathLike):
     """
     Retrieve a manifest
 
@@ -287,7 +266,7 @@ def read_pack_manifest(filepath: Path):
     LOGGER.info("Reading pack-manifest file %s", filepath)
     with filepath.open() as f:
         pack_manifest = json.load(f)
-    validate_manifest(pack_manifest)
+    validate(pack_manifest)
     pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
     return pack_manifest
 
@@ -308,7 +287,7 @@ def check_packmodes(packmodes, packmode_list):
         raise ValueError("Undefined packmodes %s", undefined)
 
 
-def write_pack_manifest(pack_manifest, filepath: Path):
+def write(pack_manifest, filepath: Path):
     """
     Write a pack manifest to a file. Doesn't validate it. Use "make_pack_manifest"
     to ensure you create a proper pack manifest
@@ -321,7 +300,7 @@ def write_pack_manifest(pack_manifest, filepath: Path):
         json.dump(pack_manifest, f, indent=4)
 
 
-def make_pack_manifest(
+def make(
     pack_version: utils.Version,
     packmodes: Mapping[str, List[str]],
     mods: List[Mapping[str, str]],
@@ -352,24 +331,8 @@ def make_pack_manifest(
     pack_manifest.update(
         {"mods": mods, "overrides": overrides, "override-cache": override_cache}
     )
-    validate_manifest(pack_manifest)
+    validate(pack_manifest)
     return pack_manifest
-
-
-def read_curse_manifest(filepath: Union[str, Path]):
-    """
-    Read a curse manifest file
-
-    Arguments:
-        filepath -- file to the json manifest to read
-    """
-    filepath = Path(filepath)
-    LOGGER.info("Reading curse manifest file %s", filepath)
-    with filepath.open() as f:
-        curse_manifest = json.load(f)
-    if curse_manifest.get("manifestVersion") != 1:
-        raise UnhandledCurseManifestVersion(curse_manifest.get("manifestVersion"))
-    return curse_manifest
 
 
 def get_override_packmode(

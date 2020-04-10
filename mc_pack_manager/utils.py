@@ -77,8 +77,11 @@ class Version:
             return self._data > other._data
         return NotImplemented
 
-    def incr(self):
-        return Version(self._data[:-1] + (self._data[-1] + 1,))
+    def incr(self, version_incr=0):
+        return Version(
+            num + (len(self._data) - pos - 1 == version_incr)
+            for pos, num in enumerate(self._data)
+        )
 
 
 class AutoFormatError(Exception):
