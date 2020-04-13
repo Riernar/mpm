@@ -65,13 +65,13 @@ def snapshot(pack_dir: PathLike, curse_zip: PathLike, version_incr=0):
         LOGGER.info("Computing diff")
         ## Mods
         common.compute_mod_diff(
-            old_mods=pack_manifest["mods"], new_mods=new_modlist, loglevel=logging.INFO
+            old_mods=pack_manifest["mods"], new_mods=new_modlist, loglevel=logging.DEBUG
         )
         ## Overrides
         override_diff = common.compute_override_diff(
             old_cache=pack_manifest["override-cache"],
             new_cache=new_override_cache,
-            logelevel=logging.INFO,
+            logelevel=logging.DEBUG,
         )
 
         # Packmodes assignements

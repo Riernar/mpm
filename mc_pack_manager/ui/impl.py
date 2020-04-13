@@ -135,7 +135,7 @@ class PackmodeBaseGUI(BaseGUI, ABC):
             return
         self.packmodes[name] = self.selector_dependencies.get_selection()
         try:
-            manifest.pack.validate(self.packmodes)
+            manifest.pack.validate_dependencies(self.packmodes)
         except Exception as err:
             msg = "Couldn't create '%s', validation failed due to %s" % (
                 name,

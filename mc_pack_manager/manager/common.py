@@ -14,7 +14,7 @@ from typing import List, Mapping, Union
 from .. import network
 from .. import utils
 
-LOGGER = logging.getLogger("mpm.manager.utils")
+LOGGER = logging.getLogger("mpm.manager.common")
 
 PathLike = Union[str, Path]
 
@@ -153,6 +153,8 @@ def compute_mod_diff(
         len(diff.updated),
         len(diff.added),
     )
+    if loglevel is not None and loglevel < logging.INFO:
+        LOGGER.info("Detailed lists logged to log file")
     if loglevel is not None and diff.deleted:
         LOGGER.log(
             loglevel,
@@ -172,7 +174,7 @@ def compute_mod_diff(
     if loglevel is not None and diff.added:
         LOGGER.log(
             loglevel,
-            "The following mods were added:%s",
+            "The following mods were added:\n%s",
             format_modlist(
                 [new_addons[addonID] for addonID in diff.added], print_version=True
             ),
