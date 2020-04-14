@@ -73,7 +73,7 @@ class FileSystem(ABC):
         """
         dowload a file from the web
         """
-    
+
     @abstractmethod
     def upload_in(self, local_file: PathLike, dest: PathLike):
         """
@@ -128,9 +128,9 @@ class LocalFileSystem(FileSystem):
         r = requests.get(url)
         with dest.open("wb") as f:
             f.write(r.content)
-    
+
     def upload_in(self, local_file: PathLike, dest: PathLike):
-        shutil.copyfile(src=local_file, dst=dest)
+        shutil.copyfile(src=Path(local_file), dst=Path(dest))
 
     def open(self, path: PathLike, mode="t"):
         path = self.base_dir / Path(path)
