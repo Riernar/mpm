@@ -9,6 +9,7 @@ import ftplib
 import hashlib
 from pathlib import Path
 import requests
+import shutil
 import tempfile
 from typing import Union
 
@@ -72,6 +73,12 @@ class FileSystem(ABC):
         """
         dowload a file from the web
         """
+    
+    @abstractmethod
+    def upload_in(self, local_file: PathLike, dest: PathLike):
+        """
+        Sends a local file to the filesystem
+        """
 
     @abstractmethod
     def open(self, path: PathLike, mode: ReadMode = "b"):
@@ -121,6 +128,9 @@ class LocalFileSystem(FileSystem):
         r = requests.get(url)
         with dest.open("wb") as f:
             f.write(r.content)
+    
+    def upload_in(self, local_file: PathLike, dest: PathLike):
+        shutil.copyfile(src=local_file, dst=dest)
 
     def open(self, path: PathLike, mode="t"):
         path = self.base_dir / Path(path)
