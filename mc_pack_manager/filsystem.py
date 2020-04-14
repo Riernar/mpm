@@ -75,9 +75,15 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def upload_in(self, local_file: PathLike, dest: PathLike):
+    def upload_file_in(self, src: PathLike, dest: PathLike):
         """
         Sends a local file to the filesystem
+        """
+
+    @abstractmethod
+    def upload_folder_in(self, src: PathLike, dest: PathLike):
+        """
+        Sends a local folder to the filesystem
         """
 
     @abstractmethod
@@ -129,8 +135,15 @@ class LocalFileSystem(FileSystem):
         with dest.open("wb") as f:
             f.write(r.content)
 
-    def upload_in(self, local_file: PathLike, dest: PathLike):
-        shutil.copyfile(src=Path(local_file), dst=Path(dest))
+    def upload_file_in(self, src: PathLike, dest: PathLike):
+        src = self.base_dir / Path(src)
+        dest = Path(dest)
+        shutil.copyfile(src=src, dst=dest)
+
+    def upload_folder_in(self, src: PathLike, dest: PathLike):
+        src = self.base_dir / Path(src)
+        dest = Path(dest)
+        shutil.copytree(src=src, dst=dest)
 
     def open(self, path: PathLike, mode="t"):
         path = self.base_dir / Path(path)
@@ -160,27 +173,6 @@ class FTPFileSystem(FileSystem):
         return (path == Path(".")) or (
             path.name in self.ftp.nlst(path.parent.as_posix())
         )
-
-    def _send_folder(self, folder: Path, dest: Path):
-        """
-        send the folder onto the ftp server on the destination dir dest
-        """
-        if not self._exists(dest):
-            # The destination folder is inexistant!
-            raise RuntimeError
-        if self._exists(dest / folder.name):
-            # The folder already exists, it should better not be overriten!
-            raise RuntimeError
-        if not folder.is_dir():
-            raise RuntimeError
-        # create folder
-        self.ftp.mkd((dest / folder.name).as_posix())
-        for elt in folder.iterdir():
-            elt_dest = dest / folder.name / elt.relative_to(folder)
-            if elt.is_file():
-                self.upload_in(elt, elt_dest)
-            else:
-                self._send_folder(elt, elt_dest)
 
     def delete_file(self, path: PathLike):
         path = Path(path)
@@ -216,13 +208,12 @@ class FTPFileSystem(FileSystem):
             raise FileNotFoundError(path)
 
     def download_in(self, url: str, dest: PathLike):
-        dest = Path(dest)
         with tempfile.TemporaryFile(dir=self.tempdir, mode="wb") as tmp_file:
             tmp_file.write(requests.get(url).content)
-            self.ftp.storbinary("STOR " + dest.as_posix(), tmp_file)
+            self.upload_file_in(tmp_file.name, dest)
 
-    def upload_in(self, local_file: PathLike, dest: PathLike):
-        local_file = Path(local_file)
+    def upload_file_in(self, src: PathLike, dest: PathLike):
+        src = Path(src)
         dest = Path(dest)
         if not src.is_file():
             raise FileNotFoundError(src)
@@ -234,6 +225,26 @@ class FTPFileSystem(FileSystem):
             raise FileExistsError(dest)
         with src.open("rb") as f:
             self.ftp.storbinary("STOR " + dest.as_posix(), f)
+
+    def upload_folder_in(self, src: PathLike, dest: PathLike):
+        src = Path(src)
+        dest = Path(dest)
+        if not self._exists(dest):
+            # The destination folder is inexistant!
+            raise RuntimeError
+        if self._exists(dest / src.name):
+            # The folder already exists, it should better not be overriten!
+            raise RuntimeError
+        if not src.is_dir():
+            raise RuntimeError
+        # create folder
+        self.ftp.mkd((dest / src.name).as_posix())
+        for elt in src.iterdir():
+            elt_dest = dest / src.name / elt.relative_to(src)
+            if elt.is_file():
+                self.upload_file_in(elt, elt_dest)
+            else:
+                self.upload_folder_in(elt, elt_dest)
 
     def open(self, path: PathLike, mode: ReadMode = "b"):
         tmp_file = tempfile.TemporaryFile(dir=self.tempdir, mode="w+" + mode)
