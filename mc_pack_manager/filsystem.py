@@ -151,13 +151,6 @@ class FTPFileSystem(FileSystem):
             path.name in self.ftp.nlst(path.parent.as_posix())
         )
 
-    def _is_dir(self, path: Path):
-        if not self._exists(path):
-            raise NotADirectoryError(path)
-        return (path == Path(".")) or (
-            path.name in self.ftp.nlst(path.parent.as_posix())
-        )
-
     def _send_file(self, src: Path, dest: Path):
         if not src.is_file():
             raise FileNotFoundError(src)
