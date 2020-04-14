@@ -18,30 +18,31 @@ from . import utils
 PathLike = Union[str, Path]
 ReadMode = Union["b", "t"]
 
+
 class BaseFilesystemError(Exception):
     """
     Base error for filesystem operation
     """
 
+
 class FTPPermissionError(BaseFilesystemError, utils.AutoFormatError):
     """
     Error for remote FTP filesystem with insufficient permissions
     """
+
     def __init__(self, err, err_str, message="Insufficient permissions: {err_str}"):
         super().__init__(message)
         self.message = message
         self.err = err
 
 
-
 class FileSystem(ABC):
-    
     @abstractmethod
     def __enter__(self):
         """
         Context manager implementation
         """
-    
+
     @abstractmethod
     def __exit__(self, exc_type, exc_value, traceback):
         """
@@ -73,11 +74,12 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def open(self, path: PathLike, mode: ReadMode="b"):
+    def open(self, path: PathLike, mode: ReadMode = "b"):
         """
         get a file object that is a valid context manager
         The file is opened in mode "w+", and the byte or text part can be specified
         """
+
 
 class LocalFileSystem(FileSystem):
     """
@@ -85,6 +87,7 @@ class LocalFileSystem(FileSystem):
     everything is done
     Path are thus relative to base_dir
     """
+
     def __init__(self, base_dir: PathLike):
         super().__init__()
         self.base_dir = base_dir
@@ -116,7 +119,7 @@ class LocalFileSystem(FileSystem):
     def download_in(self, url: str, dest: PathLike):
         dest = self.base_dir / Path(dest)
         r = requests.get(url)
-        with dest.open('wb') as f:
+        with dest.open("wb") as f:
             f.write(r.content)
 
     def open(self, path: PathLike, mode="t"):
@@ -127,32 +130,33 @@ class LocalFileSystem(FileSystem):
 class FTPFileSystem(FileSystem):
     def __init__(self, host: str, user: str, passwd: str, base_dir: PathLike):
         self.ftp = ftplib.FTP(host)
-        self.ftp.login(user = user, passwd = passwd)
+        self.ftp.login(user=user, passwd=passwd)
         self.base_dir = Path(base_dir)
         try:
             self.ftp.cwd(self.base_dir.as_posix())
         except ftplib.error_perm as err:
-            raise FTPPermissionError(
-                err=err, err_str=utils.err_str(err)
-            )
+            raise FTPPermissionError(err=err, err_str=utils.err_str(err))
         self.tempdir = tempfile.TemporaryDirectory(dir=".")
-    
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_value, traceback):
-        #Cleanup temporary directory
+        # Cleanup temporary directory
         self.tempdir.cleanup()
 
-
     def _exists(self, path: Path):
-        #check if folder or file exists
-        return (path == Path('.')) or (path.name in self.ftp.nlst(path.parent.as_posix()))
+        # check if folder or file exists
+        return (path == Path(".")) or (
+            path.name in self.ftp.nlst(path.parent.as_posix())
+        )
 
     def _is_dir(self, path: Path):
         if not self._exists(path):
             raise NotADirectoryError(path)
-        return (path == Path('.')) or (path.name in self.ftp.nlst(path.parent.as_posix()))
+        return (path == Path(".")) or (
+            path.name in self.ftp.nlst(path.parent.as_posix())
+        )
 
     def _send_file(self, src: Path, dest: Path):
         if not src.is_file():
@@ -163,9 +167,9 @@ class FTPFileSystem(FileSystem):
         if self._exists(dest):
             # The file already exists, it should better not be overriten!
             raise FileExistsError(dest)
-        
+
         with src.open("rb") as f:
-            self.ftp.storbinary('STOR '+dest.as_posix(), f)
+            self.ftp.storbinary("STOR " + dest.as_posix(), f)
 
     def _send_folder(self, folder: Path, dest: Path):
         """
@@ -175,11 +179,11 @@ class FTPFileSystem(FileSystem):
             # The destination folder is inexistant!
             raise RuntimeError
         if self._exists(dest / folder.name):
-             # The folder already exists, it should better not be overriten!
-             raise RuntimeError
+            # The folder already exists, it should better not be overriten!
+            raise RuntimeError
         if not folder.is_dir():
             raise RuntimeError
-        #create folder
+        # create folder
         self.ftp.mkd((dest / folder.name).as_posix())
         for elt in folder.iterdir():
             elt_dest = dest / folder.name / elt.relative_to(folder)
@@ -201,12 +205,12 @@ class FTPFileSystem(FileSystem):
 
     def _sub_delete_folder(self, path: Path):
         try:
-            self.ftp.cwd(path.as_posix()) #fails if not a dir
+            self.ftp.cwd(path.as_posix())  # fails if not a dir
         except ftplib.error_perm:
-            #fallback if it is a file
+            # fallback if it is a file
             self.delete_file(path)
             return
-        #here it is a dir
+        # here it is a dir
         for elt in self.ftp.nlst("."):
             elt = Path(elt)
             self._sub_delete_folder(elt)
@@ -225,12 +229,13 @@ class FTPFileSystem(FileSystem):
         dest = Path(dest)
         with tempfile.TemporaryFile(dir=self.tempdir, mode="wb") as tmp_file:
             tmp_file.write(requests.get(url).content)
-            self.ftp.storbinary('STOR ' + dest.as_posix(), tmp_file)
+            self.ftp.storbinary("STOR " + dest.as_posix(), tmp_file)
 
-    def open(self, path: PathLike, mode:ReadMode="b"):
-        tmp_file = tempfile.TemporaryFile(dir=self.tempdir, mode="w+"+mode)
-        self.ftp.retrbinary('RETR ' + path.as_posix(), lambda data: tmp_file.file.write(data))
+    def open(self, path: PathLike, mode: ReadMode = "b"):
+        tmp_file = tempfile.TemporaryFile(dir=self.tempdir, mode="w+" + mode)
+        self.ftp.retrbinary(
+            "RETR " + path.as_posix(), lambda data: tmp_file.file.write(data)
+        )
         tmp_file.flush()
         tmp_file.seek(0)
         return tmp_file
-        

@@ -49,6 +49,8 @@ def assign_overrides(packmodes, overrides, override_cache, added_override=None):
         overrides assignements to packmodes
     """
     LOGGER.info("Creating GUI for overrides assignements")
-    gui = OverridesGUI(deepcopy(packmodes), override_cache, deepcopy(overrides), added_override)
+    gui = OverridesGUI(
+        deepcopy(packmodes), override_cache, deepcopy(overrides), added_override
+    )
     gui.run()
     return gui.packmodes, gui.overrides

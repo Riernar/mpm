@@ -51,6 +51,7 @@ def read(filepath: PathLike):
         raise UnhandledCurseManifestVersion(curse_manifest.get("manifestVersion"))
     return curse_manifest
 
+
 def write(curse_manifest, filepath: PathLike):
     """
     Write a curse manifest into a file
@@ -61,6 +62,7 @@ def write(curse_manifest, filepath: PathLike):
     """
     with Path(filepath).open("w") as f:
         json.dump(curse_manifest, f, indent=4)
+
 
 def dump(curse_manifest, filelike):
     """

@@ -81,12 +81,17 @@ def snapshot(pack_dir: PathLike, curse_zip: PathLike, version_incr=0):
         packmodes, new_modlist = ui.assign_mods(packmodes, new_modlist)
         ## Overrides
         packmodes, overrides = ui.assign_overrides(
-            packmodes, pack_manifest["overrides"], new_override_cache, override_diff.added
+            packmodes,
+            pack_manifest["overrides"],
+            new_override_cache,
+            override_diff.added,
         )
 
         # Create new manifest
         new_pack_manifest = manifest.pack.make(
-            pack_version=pack_manifest["pack-version"].incr(min(max(int(version_incr), 0), 2)),
+            pack_version=pack_manifest["pack-version"].incr(
+                min(max(int(version_incr), 0), 2)
+            ),
             packmodes=packmodes,
             mods=new_modlist,
             overrides=overrides,

@@ -18,6 +18,7 @@ LOGGER = logging.getLogger("mpm.manager.release")
 
 PathLike = Union[str, Path]
 
+
 def mpm(pack_dir: PathLike, output_file: PathLike, force=False):
     """
     Creates a .zip useable by the update functionnality of the pack manager
@@ -104,10 +105,11 @@ def curse(
         LOGGER.info("No 'packmodes' argument, using all overrides")
         selected_overrides = pack_manifest["override-cache"]
     else:
-        selected_overrides = manifest.pack.get_selected_overrides(pack_manifest, packmodes)
+        selected_overrides = manifest.pack.get_selected_overrides(
+            pack_manifest, packmodes
+        )
     LOGGER.debug(
-        "Selected overrides:\n  - %s",
-        "\n  - ".join(selected_overrides.keys()),
+        "Selected overrides:\n  - %s", "\n  - ".join(selected_overrides.keys()),
     )
     # Compress overrides
     LOGGER.info("Adding selected overrides to .zip archive")

@@ -11,7 +11,6 @@ from typing import Union
 PathLike = Union[str, Path]
 
 
-
 def update_pack():
     """
     Updates a modpack installation
