@@ -3,6 +3,7 @@ Part of the Minecraft Pack Manager utility (mpm)
 
 Module handling filesystem I/O for updates
 """
+# Standard Library imports
 from abc import ABC, abstractmethod
 import ftplib
 import hashlib
@@ -11,8 +12,27 @@ import requests
 import tempfile
 from typing import Union
 
+# Local imports
+from . import utils
 
 PathLike = Union[str, Path]
+ReadMode = Union["b", "t"]
+
+class BaseFilesystemError(Exception):
+    """
+    Base error for filesystem operation
+    """
+
+class FTPPermissionError(BaseFilesystemError, utils.AutoFormatError):
+    """
+    Error for remote FTP filesystem with insufficient permissions
+    """
+    def __init__(self, err, err_str, message="Insufficient permissions: {err_str}"):
+        super().__init__(message)
+        self.message = message
+        self.err = err
+
+
 
 class FileSystem(ABC):
     
@@ -47,16 +67,16 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def download_file(self, url: str, dest: PathLike):
+    def download_in(self, url: str, dest: PathLike):
         """
         dowload a file from the web
         """
 
     @abstractmethod
-    def open(self, path: PathLike, mode="r"):
+    def open(self, path: PathLike, mode: ReadMode="b"):
         """
-        get a file object
-        compliant with the "with ... as ...:" syntax
+        get a file object that is a valid context manager
+        The file is opened in mode "w+", and the byte or text part can be specified
         """
 
 class LocalFileSystem(FileSystem):
@@ -93,15 +113,15 @@ class LocalFileSystem(FileSystem):
         dest = self.base_dir / Path(dest)
         path.rename(dest)
 
-    def download_file(self, url: str, dest: PathLike):
+    def download_in(self, url: str, dest: PathLike):
         dest = self.base_dir / Path(dest)
         r = requests.get(url)
         with dest.open('wb') as f:
             f.write(r.content)
 
-    def open(self, path: PathLike, mode="r"):
+    def open(self, path: PathLike, mode="t"):
         path = self.base_dir / Path(path)
-        return path.open(mode)
+        return path.open("w+" + mode)
 
 
 class FTPFileSystem(FileSystem):
@@ -111,17 +131,17 @@ class FTPFileSystem(FileSystem):
         self.base_dir = Path(base_dir)
         try:
             self.ftp.cwd(self.base_dir.as_posix())
-        except ftplib.error_perm:
-            raise RuntimeError
+        except ftplib.error_perm as err:
+            raise FTPPermissionError(
+                err=err, err_str=utils.err_str(err)
+            )
         self.tempdir = tempfile.TemporaryDirectory(dir=".")
     
     def __enter__(self):
         return self
     
     def __exit__(self, exc_type, exc_value, traceback):
-        """
-        Cleanup temporary directory
-        """
+        #Cleanup temporary directory
         self.tempdir.cleanup()
 
 
@@ -131,19 +151,20 @@ class FTPFileSystem(FileSystem):
 
     def _is_dir(self, path: Path):
         if not self._exists(path):
-            raise RuntimeError
+            raise NotADirectoryError(path)
         return (path == Path('.')) or (path.name in self.ftp.nlst(path.parent.as_posix()))
 
-    def _send_file(self, file: Path, dest: Path):
+    def _send_file(self, src: Path, dest: Path):
+        if not src.is_file():
+            raise FileNotFoundError(src)
         if not self._exists(dest.parent):
             # check if destination directory exists
-            raise RuntimeError
+            raise NotADirectoryError(dest.parent)
         if self._exists(dest):
             # The file already exists, it should better not be overriten!
-            raise RuntimeError
-        if not file.is_file():
-            raise RuntimeError
-        with file.open("rb") as f:
+            raise FileExistsError(dest)
+        
+        with src.open("rb") as f:
             self.ftp.storbinary('STOR '+dest.as_posix(), f)
 
     def _send_folder(self, folder: Path, dest: Path):
@@ -197,16 +218,19 @@ class FTPFileSystem(FileSystem):
         dest = Path(dest)
         if self._exists(path):
             self.ftp.rename(path.as_posix(), dest.as_posix())
+        else:
+            raise FileNotFoundError(path)
 
-    def download_file(self, url: str, dest: PathLike):
+    def download_in(self, url: str, dest: PathLike):
         dest = Path(dest)
         with tempfile.TemporaryFile(dir=self.tempdir, mode="wb") as tmp_file:
             tmp_file.write(requests.get(url).content)
             self.ftp.storbinary('STOR ' + dest.as_posix(), tmp_file)
 
-    def open(self, path: PathLike):
-        tmp_file = tempfile.TemporaryFile(dir=self.tempdir)
+    def open(self, path: PathLike, mode:ReadMode="b"):
+        tmp_file = tempfile.TemporaryFile(dir=self.tempdir, mode="w+"+mode)
         self.ftp.retrbinary('RETR ' + path.as_posix(), lambda data: tmp_file.file.write(data))
         tmp_file.flush()
+        tmp_file.seek(0)
         return tmp_file
         
