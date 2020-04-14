@@ -161,19 +161,6 @@ class FTPFileSystem(FileSystem):
             path.name in self.ftp.nlst(path.parent.as_posix())
         )
 
-    def _send_file(self, src: Path, dest: Path):
-        if not src.is_file():
-            raise FileNotFoundError(src)
-        if not self._exists(dest.parent):
-            # check if destination directory exists
-            raise NotADirectoryError(dest.parent)
-        if self._exists(dest):
-            # The file already exists, it should better not be overriten!
-            raise FileExistsError(dest)
-
-        with src.open("rb") as f:
-            self.ftp.storbinary("STOR " + dest.as_posix(), f)
-
     def _send_folder(self, folder: Path, dest: Path):
         """
         send the folder onto the ftp server on the destination dir dest
@@ -191,7 +178,7 @@ class FTPFileSystem(FileSystem):
         for elt in folder.iterdir():
             elt_dest = dest / folder.name / elt.relative_to(folder)
             if elt.is_file():
-                self._send_file(elt, elt_dest)
+                self.upload_in(elt, elt_dest)
             else:
                 self._send_folder(elt, elt_dest)
 
@@ -233,6 +220,20 @@ class FTPFileSystem(FileSystem):
         with tempfile.TemporaryFile(dir=self.tempdir, mode="wb") as tmp_file:
             tmp_file.write(requests.get(url).content)
             self.ftp.storbinary("STOR " + dest.as_posix(), tmp_file)
+
+    def upload_in(self, local_file: PathLike, dest: PathLike):
+        local_file = Path(local_file)
+        dest = Path(dest)
+        if not src.is_file():
+            raise FileNotFoundError(src)
+        if not self._exists(dest.parent):
+            # check if destination directory exists
+            raise NotADirectoryError(dest.parent)
+        if self._exists(dest):
+            # The file already exists, it should better not be overriten!
+            raise FileExistsError(dest)
+        with src.open("rb") as f:
+            self.ftp.storbinary("STOR " + dest.as_posix(), f)
 
     def open(self, path: PathLike, mode: ReadMode = "b"):
         tmp_file = tempfile.TemporaryFile(dir=self.tempdir, mode="w+" + mode)
