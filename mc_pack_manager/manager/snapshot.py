@@ -42,7 +42,7 @@ def snapshot(pack_dir: PathLike, curse_zip: PathLike, version_incr=0):
         raise zipfile.BadZipFile("%s is not a zip file" % curse_zip)
     # Prepare pack_dir
     pack_dir.mkdir(parents=True, exist_ok=True)
-    pack_manifest = manifest.pack.load_from(pack_dir)
+    pack_manifest = manifest.pack.read_from(pack_dir)
 
     with tempfile.TemporaryDirectory(dir=".") as temp_dir:
         temp_dir = Path(temp_dir)
@@ -71,7 +71,7 @@ def snapshot(pack_dir: PathLike, curse_zip: PathLike, version_incr=0):
         override_diff = common.compute_override_diff(
             old_cache=pack_manifest["override-cache"],
             new_cache=new_override_cache,
-            logelevel=logging.DEBUG,
+            loglevel=logging.DEBUG,
         )
 
         # Packmodes assignements

@@ -68,7 +68,7 @@ def curse(
     output_zip = Path(output_zip)
     common.check_snapshot_dir(pack_dir)
     # Read manifest
-    pack_manifest = manifest.pack.load_from(pack_dir)
+    pack_manifest = manifest.pack.read_from(pack_dir)
     curse_manifest = manifest.curse.read(pack_dir / "manifest.json")
     # Check packmodes
     if packmodes:

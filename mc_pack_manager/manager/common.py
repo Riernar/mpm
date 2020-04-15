@@ -211,7 +211,7 @@ def build_overrides_cache(override_dir: Path) -> OrderedDict:
 
 
 def compute_override_diff(
-    old_cache: OrderedDict, new_cache: OrderedDict, *, logelevel=None
+    old_cache: OrderedDict, new_cache: OrderedDict, *, loglevel=None
 ) -> DiffObject:
     """
     Computes the difference between override caches
@@ -235,11 +235,11 @@ def compute_override_diff(
         updated=updated,
         added=new_cache.keys() - old_cache.keys(),
     )
-    if logelevel is not None:
+    if loglevel is not None:
         for cat_name, filepath_set in zip(diff._fields, diff):
             if filepath_set:
                 LOGGER.log(
-                    logelevel,
+                    loglevel,
                     "The following overrides were %s:\n  - %s",
                     cat_name,
                     "\n  - ".join(sorted(filepath_set)),
@@ -249,8 +249,8 @@ def compute_override_diff(
 
 def apply_override_diff(target_dir: PathLike, source_dir: PathLike, diff: DiffObject):
     """
-    Uses the diff between overrides to smartly update target_dir. Pathes
-    in diff are assuled to be relative to the provided directories
+    Uses the diff between overrides to smartly update target_dir. Paths
+    in diff are assumed to be relative to the provided directories
 
     Arguments
         target_dir -- directory to apply the diff in

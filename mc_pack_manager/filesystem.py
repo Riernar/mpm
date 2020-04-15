@@ -7,11 +7,13 @@ Module handling filesystem I/O for updates
 from abc import ABC, abstractmethod
 import ftplib
 import hashlib
+import logging
 from pathlib import Path
 import requests
 import shutil
 import tempfile
 from typing import Union
+from urllib.parse import ParseResult
 
 # Local imports
 from . import utils
@@ -19,12 +21,21 @@ from . import utils
 PathLike = Union[str, Path]
 ReadMode = Union["b", "t"]
 
+LOGGER = logging.getLogger("mpm.filesystem")
 
 class BaseFilesystemError(Exception):
     """
     Base error for filesystem operation
     """
 
+class UnhandledURLError(BaseFilesystemError, utils.AutoFormatError):
+    """
+    Exception for url that cannot be converted to a FileSystem object
+    """
+    def __init__(self, url, message="No valid filesystem for url '{url}'"):
+        super().__init__(message)
+        self.url = url
+        self.message = message
 
 class FTPPermissionError(BaseFilesystemError, utils.AutoFormatError):
     """
@@ -151,9 +162,14 @@ class LocalFileSystem(FileSystem):
 
 
 class FTPFileSystem(FileSystem):
-    def __init__(self, host: str, user: str, passwd: str, base_dir: PathLike):
-        self.ftp = ftplib.FTP(host)
-        self.ftp.login(user=user, passwd=passwd)
+    def __init__(self, host: str, user: str, passwd: str, base_dir: PathLike, use_tls: bool = False):
+        if use_tls:
+            self.ftp = ftplib.FTP_TLS(host)
+            self.ftp.login(user=user, passwd=passwd)
+            self.ftp.prot_p()
+        else:
+            self.ftp = ftplib.FTP(host)
+            self.ftp.login(user=user, passwd=passwd)
         self.base_dir = Path(base_dir)
         try:
             self.ftp.cwd(self.base_dir.as_posix())
@@ -254,3 +270,30 @@ class FTPFileSystem(FileSystem):
         tmp_file.flush()
         tmp_file.seek(0)
         return tmp_file
+
+
+
+def get_filesystem(url: ParseResult):
+    """
+    Return the appropriate filesystem for a parsed url. Supported url:
+        path only url, making a LocalFileSystem object
+        ftp url, making a FTPFileSystem object
+    """
+    if url.scheme == "" and url.netloc == "":
+        LOGGER.info("Connecting to local filesystem")
+        return LocalFileSystem(url.path)
+    elif url.scheme in  ("ftp", "sftp"):
+        LOGGER.info("Connecting to remote filesystem over ftp")
+        if url.scheme == "sftp":
+            LOGGER.info("TLS is activated")
+        else:
+            LOGGER.info("TLS is *NOT* activated")
+        return FTPFileSystem(
+            host=url.hostname,
+            user=url.username,
+            passwd=url.password,
+            base_dir=url.path,
+            use_tls=url.scheme == "sftp"
+        )
+    else:
+        raise UnhandledURLError(url=url.geturl())

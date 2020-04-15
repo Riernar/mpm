@@ -8,7 +8,7 @@ from copy import deepcopy
 import json
 import logging
 from pathlib import Path
-from typing import Iterable, List, Mapping, Union
+from typing import Iterable, List, Mapping, Union, Set
 
 # Third party library import
 import jsonschema
@@ -231,7 +231,7 @@ def get_default(with_override_url: bool = False):
     return pack_manifest
 
 
-def load_from(dir_: Union[str, Path]):
+def read_from(dir_: Union[str, Path]):
     """
     Load the pack-manifest.json file from dir ro defaults to the default manifest
 
@@ -265,7 +265,19 @@ def read(filepath: PathLike):
     filepath = Path(filepath)
     LOGGER.info("Reading pack-manifest file %s", filepath)
     with filepath.open() as f:
-        pack_manifest = json.load(f)
+        return load(f)
+
+def load(filelike):
+    """
+    Read a packmanifest from a filelike object
+    """
+    pack_manifest = json.load(filelike)
+    validate(pack_manifest)
+    pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
+    return pack_manifest
+
+def from_str(string):
+    pack_manifest = json.loads(string)
     validate(pack_manifest)
     pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
     return pack_manifest
@@ -362,7 +374,7 @@ def get_override_packmode(
                 return overrides[key]
 
 
-def get_all_dependencies(packmodes, packmode_list):
+def get_all_dependencies(packmodes, packmode_list) -> Set[str]:
     """
     Returns the set of packmodes to include when selecting packmode_list
 
