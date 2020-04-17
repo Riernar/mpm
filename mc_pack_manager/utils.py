@@ -229,3 +229,9 @@ def err_str(err):
 
 def err_traceback(err):
     return "".join(format_tb(err.__traceback__))
+
+def getLogger(name):
+    """
+    Returns the logger with the first part of the name changed to "mpm"
+    """
+    return logging.getLogger(".".join(["mpm"] +  name.split(".")[1:]))

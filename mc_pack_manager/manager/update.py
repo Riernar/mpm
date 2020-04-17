@@ -146,6 +146,8 @@ def update_pack_http(
                 ).geturl(),
                 override
             )
+        # Write back new manifest
+        raise NotImplementedError
     LOGGER.info("Done !")
 
 
