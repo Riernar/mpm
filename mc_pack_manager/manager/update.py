@@ -102,18 +102,18 @@ def update_pack_http(
         mod_dir = Path("mods")
         for addonID in mod_diff.deleted:
             mod = local_manifest["mods"][addonID]
-            lfs.delete_file(mod_dir / mod["filename"])
+            lfs.unlink(mod_dir / mod["filename"])
         for addonID in mod_diff.updated:
             old_mod = local_manifest["mods"][addonID]
-            lfs.delete_file(mod_dir / old_mod["filename"])
+            lfs.unlink(mod_dir / old_mod["filename"])
             new_mod = remote_manifest["mods"][addonID]
-            lfs.download_in(
+            lfs.download(
                 network.TwitchAPI.get_download_url(addonID, new_mod["fileID"]),
                 mod_dir / new_mod["filename"]
             )
         for addonID in mod_diff.added:
             mod = remote_manifest["mods"][addonID]
-            lfs.download_in(
+            lfs.download(
                 network.TwitchAPI.get_download_url(addonID, mod["fileID"]),
                 mod_dir / new_mod["filename"]
             )
@@ -130,17 +130,17 @@ def update_pack_http(
         remote_url = manifest_url._replace(path=str(Path(manifest_url.path).parent))
         remote_path = Path(remote_url.path)
         for override in override_diff.deleted:
-            lfs.delete_file(override)
+            lfs.unlink(override)
         for override in override_diff.updated:
-            lfs.delete_file(override)
-            lfs.download_in(
+            lfs.unlink(override)
+            lfs.download(
                 remote_url._replace(
                     path=remote_path / "overrides" / override
                 ).geturl(),
                 override
             )
         for override in override_diff.added:
-            lfs.download_in(
+            lfs.download(
                 remote_url._replace(
                     path=remote_path / "overrides" / override
                 ).geturl(),

@@ -318,4 +318,5 @@ class FTPFileSystem(common.FileSystem):
                 cmd="RETR %s" % (self.base_dir / path).as_posix(),
                 callback=lambda data: tmp.write(data)
             )
+        tmp.seek(0)
         return common.RemoteFileObject(fs=self, remote_path=path, tmp=tmp)

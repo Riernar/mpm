@@ -9,7 +9,7 @@ import urllib.parse
 
 # Local imports
 from .. import utils
-from ..filesystem.common import FileSystemBaseError
+from ..filesystem.common import FileSystemBaseError, FileSystem
 from ..filesystem.local import LocalFileSystem
 from ..filesystem.ftp import FTPFileSystem
 
@@ -24,7 +24,7 @@ class UnhandledURLError(FileSystemBaseError, utils.AutoFormatError):
         self.url = url
         self.message = message
 
-def get_filesystem(fs_root: str):
+def get_filesystem(fs_root: str) -> FileSystem:
     """
     Retruns an appropriate filesystem object from a path or an url
 
