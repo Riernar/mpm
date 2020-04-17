@@ -14,10 +14,12 @@ from ..filesystem import common
 
 LOGGER = utils.getLogger(__name__)
 
+
 class LocalFileSystem(common.FileSystem):
     """
     Local filesystem class
     """
+
     def __init__(self, base_dir: common.PathLike):
         """
         Create a new local filesystem, rooted in base_dir
@@ -27,14 +29,14 @@ class LocalFileSystem(common.FileSystem):
         """
         super().__init__(base_dir)
         self.base_dir = Path(base_dir)
-    
+
     def close(self):
         """
         Clean up resources
         """
         # Nothing to do
         pass
-    
+
     def exists(self, path: common.PathLike):
         """
         Determines if the path points to something
@@ -46,7 +48,7 @@ class LocalFileSystem(common.FileSystem):
             True if the path exists, False, otherwise
         """
         return (self.base_dir / Path(path)).exists()
-    
+
     def is_file(self, path: common.PathLike):
         """
         Tests if a path is a file. Returns false if the path doesn't exists
@@ -94,7 +96,9 @@ class LocalFileSystem(common.FileSystem):
         if p.exists():
             shutil.rmtree(p, ignore_errors=True)
 
-    def move_file(self, path: common.PathLike, dest: common.PathLike, force:bool=False):
+    def move_file(
+        self, path: common.PathLike, dest: common.PathLike, force: bool = False
+    ):
         """
         Moves a file
 
@@ -109,7 +113,7 @@ class LocalFileSystem(common.FileSystem):
         dest = self.base_dir / Path(dest)
         path.rename(dest)
 
-    def download(self, url: str, dest: common.PathLike, force:bool=False):
+    def download(self, url: str, dest: common.PathLike, force: bool = False):
         """
         Downloads a file from the web into the filesystem
 
@@ -119,11 +123,13 @@ class LocalFileSystem(common.FileSystem):
             force -- overwrite destination file if it exists
         """
         if not force and self.exists(dest):
-            raise FileExistsError("%s exists, cannot download in that destination" % dest)
+            raise FileExistsError(
+                "%s exists, cannot download in that destination" % dest
+            )
         with (self.base_dir / Path(dest)).open("wb") as f:
             f.write(requests.get(url).content)
 
-    def send_data(self, fp, dest: common.PathLike, force:bool=False):
+    def send_data(self, fp, dest: common.PathLike, force: bool = False):
         """
         Sends the content of a filelike object to dest
 
@@ -140,12 +146,17 @@ class LocalFileSystem(common.FileSystem):
         elif isinstance(data, bytes):
             mode = "b"
         else:
-            raise TypeError("Filelike read() method returns type %s, which is neither str or bytes" % type(data))
+            raise TypeError(
+                "Filelike read() method returns type %s, which is neither str or bytes"
+                % type(data)
+            )
         with (self.base_dir / dest).open("w" + mode) as lf:
             lf.write(data)
             lf.write(fp.read())
 
-    def send_file(self, src: common.PathLike, dest: common.PathLike, force:bool=False):
+    def send_file(
+        self, src: common.PathLike, dest: common.PathLike, force: bool = False
+    ):
         """
         Sends a local file to the filesystem
 
@@ -160,7 +171,9 @@ class LocalFileSystem(common.FileSystem):
         dest = Path(dest)
         shutil.copyfile(src=src, dst=dest)
 
-    def send_dir(self, src: common.PathLike, dest: common.PathLike, force:bool=False):
+    def send_dir(
+        self, src: common.PathLike, dest: common.PathLike, force: bool = False
+    ):
         """
         Sends a local directory to the filesystem
 

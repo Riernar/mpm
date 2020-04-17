@@ -18,8 +18,9 @@ from .. import utils
 from ..manager import common
 
 PathLike = Union[str, Path]
-        
+
 LOGGER = logging.getLogger("mpm.manager.update")
+
 
 class UnhandledManifestURL(utils.AutoFormatError):
     """
@@ -29,16 +30,14 @@ class UnhandledManifestURL(utils.AutoFormatError):
         url -- the unhandled url
         message -- error explanation
     """
+
     def __init__(self, url, message="Cannot handle manifest url '{url}' for an update"):
         super().__init__(message)
         self.url = url
         self.message = message
 
-def update_pack(
-    install_url: str,
-    manifest_url: str,
-    packmodes: List[str]
-):
+
+def update_pack(install_url: str, manifest_url: str, packmodes: List[str]):
     """
     Updates a modpack installation
 
@@ -56,7 +55,11 @@ def update_pack(
     manifest_url = urllib.parse.urlparse(manifest_url)
     if manifest_url.scheme in ("http", "https"):
         update_pack_http(install_url, manifest_url, packmodes)
-    elif manifest_url.scheme == "" and manifest_url.netloc == "" and manifest_url.path[:-3] == "zip":
+    elif (
+        manifest_url.scheme == ""
+        and manifest_url.netloc == ""
+        and manifest_url.path[:-3] == "zip"
+    ):
         update_pack_zip(install_url, manifest, packmodes)
     else:
         raise UnhandledManifestURL(manifest_url)
@@ -65,30 +68,42 @@ def update_pack(
 def update_pack_http(
     install_url: urllib.parse.ParseResult,
     manifest_url: urllib.parse.ParseResult,
-    packmodes: List[str]
+    packmodes: List[str],
 ):
     LOGGER.info("Updating from remote http manifest")
-    with filesystem.get_filesystem(install_url) as lfs:
+    with filesystem.get_filesystem(install_url) as fs:
         # Get local configuration
-        with lfs.open("pack-manifest.json") as f:
+        with fs.open("pack-manifest.json") as f:
             local_manifest = manifest.pack.read(f)
         LOGGER.info("Local version is %s", local_manifest["pack-version"])
-        LOGGER.info("Current packmodes are: %s", ", ".join(local_manifest.get("current-packmdoes", [])))
+        LOGGER.info(
+            "Current packmodes are: %s",
+            ", ".join(local_manifest.get("current-packmdoes", [])),
+        )
         # Get remote configuration
         LOGGER.info("Retrieving remote manifest")
-        remote_manifest = manifest.pack.from_str(requests.get(manifest_url.geturl()).content)
+        remote_manifest = manifest.pack.from_str(
+            requests.get(manifest_url.geturl()).content
+        )
         # Compute states
-        local_packmodes = manifest.pack.get_all_dependencies(local_manifest["packmodes"], local_manifest["current-packmodes"])
-        new_packmodes = manifest.pack.get_all_dependencies(remote_manifest["packmodes"], packmodes)
+        local_packmodes = manifest.pack.get_all_dependencies(
+            local_manifest["packmodes"], local_manifest["current-packmodes"]
+        )
+        new_packmodes = manifest.pack.get_all_dependencies(
+            remote_manifest["packmodes"], packmodes
+        )
         # Quick comparison
-        if remote_manifest["pack-version"] == local_manifest["pack_version"] and local_packmodes == new_packmodes:
+        if (
+            remote_manifest["pack-version"] == local_manifest["pack_version"]
+            and local_packmodes == new_packmodes
+        ):
             LOGGER.info("Nothing to update !")
             return
         else:
             LOGGER.info(
                 "Updating to version %s, installing packmodes %s (including dependencies)",
                 remote_manifest["pack-version"],
-                ", ".join(packmode for packmode in sorted(new_packmodes))
+                ", ".join(packmode for packmode in sorted(new_packmodes)),
             )
         # Update mods
         LOGGER.info("Updating mods")
@@ -96,26 +111,26 @@ def update_pack_http(
         mod_diff = common.compute_mod_diff(
             manifest.pack.get_selected_mods(local_manifest, local_packmodes),
             manifest.pack.get_selected_mods(remote_manifest, new_packmodes),
-            loglevel=logging.INFO
+            loglevel=logging.INFO,
         )
         LOGGER.info("Applying mod difference")
         mod_dir = Path("mods")
         for addonID in mod_diff.deleted:
             mod = local_manifest["mods"][addonID]
-            lfs.unlink(mod_dir / mod["filename"])
+            fs.unlink(mod_dir / mod["filename"])
         for addonID in mod_diff.updated:
             old_mod = local_manifest["mods"][addonID]
-            lfs.unlink(mod_dir / old_mod["filename"])
+            fs.unlink(mod_dir / old_mod["filename"])
             new_mod = remote_manifest["mods"][addonID]
-            lfs.download(
+            fs.download(
                 network.TwitchAPI.get_download_url(addonID, new_mod["fileID"]),
-                mod_dir / new_mod["filename"]
+                mod_dir / new_mod["filename"],
             )
         for addonID in mod_diff.added:
             mod = remote_manifest["mods"][addonID]
-            lfs.download(
+            fs.download(
                 network.TwitchAPI.get_download_url(addonID, mod["fileID"]),
-                mod_dir / new_mod["filename"]
+                mod_dir / new_mod["filename"],
             )
 
         # Update overrides
@@ -124,36 +139,39 @@ def update_pack_http(
         override_diff = common.compute_override_diff(
             manifest.pack.get_selected_overrides(local_manifest, local_packmodes),
             manifest.pack.get_selected_overrides(remote_manifest, new_packmodes),
-            loglevel=logging.INFO
+            loglevel=logging.INFO,
         )
         LOGGER.info("Applying override difference")
         remote_url = manifest_url._replace(path=str(Path(manifest_url.path).parent))
         remote_path = Path(remote_url.path)
         for override in override_diff.deleted:
-            lfs.unlink(override)
+            fs.unlink(override)
         for override in override_diff.updated:
-            lfs.unlink(override)
-            lfs.download(
-                remote_url._replace(
-                    path=remote_path / "overrides" / override
-                ).geturl(),
-                override
+            fs.unlink(override)
+            fs.download(
+                remote_url._replace(path=remote_path / "overrides" / override).geturl(),
+                override,
             )
         for override in override_diff.added:
-            lfs.download(
-                remote_url._replace(
-                    path=remote_path / "overrides" / override
-                ).geturl(),
-                override
+            fs.download(
+                remote_url._replace(path=remote_path / "overrides" / override).geturl(),
+                override,
             )
-        # Write back new manifest
-        raise NotImplementedError
+        # Write new manifest to save current state
+        new_manifest = manifest.pack.make(
+            pack_version=remote_manifest["pack-version"],
+            packmodes=remote_manifest["packmodes"],
+            mods=remote_manifest["mods"],
+            overrides=remote_manifest["overrides"],
+            override_cache=remote_manifest["override-cache"],
+            current_packmodes=packmodes,
+        )
+        with fs.open("pack-manifest.json", "wt") as f:
+            manifest.pack.dump(new_manifest, f)
     LOGGER.info("Done !")
 
 
 def update_pack_zip(
-    install_url: urllib.parse.ParseResult,
-    manifest_url: PathLike,
-    packmodes: List[str]
+    install_url: urllib.parse.ParseResult, manifest_url: PathLike, packmodes: List[str]
 ):
     raise NotImplementedError

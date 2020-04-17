@@ -65,52 +65,58 @@ if __name__ == "__main__":
         dest="release_type", required=True, help="Specific release type"
     )
     ## MPM Release subcommand
-    mpm_release_parser = release_subparser.add_parser("mpm", help="Release compatible with mpm")
-    mpm_release_parser.description = "Creates a release .zip compatible with mpm - simply the compressed snapshot"
+    mpm_release_parser = release_subparser.add_parser(
+        "mpm", help="Release compatible with mpm"
+    )
+    mpm_release_parser.description = (
+        "Creates a release .zip compatible with mpm - simply the compressed snapshot"
+    )
     mpm_release_parser.add_argument(
         "pack_dir",
         type=Path,
-        help="Snapshot directory were the snapshot was generated using 'mpm snapshot'"
+        help="Snapshot directory were the snapshot was generated using 'mpm snapshot'",
     )
     mpm_release_parser.add_argument(
-        "output_zip",
-        type=Path,
-        help="Path to the zipfile to create"
+        "output_zip", type=Path, help="Path to the zipfile to create"
     )
     mpm_release_parser.add_argument(
-        "-f", "--force",
+        "-f",
+        "--force",
         action="store_true",
-        help="erase output_zip if it already exists"
+        help="erase output_zip if it already exists",
     )
     ## Curse release
-    curse_release_parser = release_subparser.add_parser("curse", help="Release compatible with curse")
-    curse_release_parser.description = "Creates a release .zip compatible with curse and the twitch app"
+    curse_release_parser = release_subparser.add_parser(
+        "curse", help="Release compatible with curse"
+    )
+    curse_release_parser.description = (
+        "Creates a release .zip compatible with curse and the twitch app"
+    )
     curse_release_parser.add_argument(
         "pack_dir",
         type=Path,
-        help="Snapshot directory were the snapshot was generated using 'mpm snapshot'"
+        help="Snapshot directory were the snapshot was generated using 'mpm snapshot'",
     )
     curse_release_parser.add_argument(
-        "output_zip",
-        type=Path,
-        help="Path to the zipfile to create"
+        "output_zip", type=Path, help="Path to the zipfile to create"
     )
     curse_release_parser.add_argument(
-        "-f", "--force",
+        "-f",
+        "--force",
         action="store_true",
-        help="erase output_zip if it already exists"
+        help="erase output_zip if it already exists",
     )
     curse_release_parser.add_argument(
         "--include-mpm",
         action="store_true",
-        help="Bundle mpm (Minecraft Pack Manager) into the release, ready to use fo auto-updates"
+        help="Bundle mpm (Minecraft Pack Manager) into the release, ready to use fo auto-updates",
     )
     curse_release_parser.add_argument(
         "packmodes",
         metavar="packmode",
         nargs="*",
         help="Only include mods/overrides belonging to those packmodes and their dependencies",
-        default=[]
+        default=[],
     )
 
     # Argument parsing
@@ -119,17 +125,23 @@ if __name__ == "__main__":
     # Command selection
     try:
         if args.command == "snapshot":
-            mpm.manager.snapshot.snapshot(pack_dir=args.pack_dir, curse_zip=args.curse_zip)
+            mpm.manager.snapshot.snapshot(
+                pack_dir=args.pack_dir, curse_zip=args.curse_zip
+            )
         elif args.command == "release":
             if args.release_type == "mpm":
-                mpm.manager.release.mpm(pack_dir=args.pack_dir, output_file=args.output_zip, force=args.force)
+                mpm.manager.release.mpm(
+                    pack_dir=args.pack_dir,
+                    output_file=args.output_zip,
+                    force=args.force,
+                )
             elif args.release_type == "curse":
                 mpm.manager.release.curse(
                     pack_dir=args.pack_dir,
                     output_zip=args.output_zip,
                     packmodes=args.packmodes,
                     force=args.force,
-                    include_mpm=args.include_mpm
+                    include_mpm=args.include_mpm,
                 )
 
     except Exception as err:

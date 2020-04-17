@@ -62,7 +62,7 @@ class TwitchAPI:
         else:
             LOGGER.debug("Using cached info for file %s", key)
             return cls.FILE_CACHE[key]
-    
+
     @classmethod
     def get_download_url(cls, addonID, fileID):
         """
@@ -74,4 +74,6 @@ class TwitchAPI:
             return cls.FILE_CACHE[key]["downloadUrl"]
         else:
             LOGGER.debug("Retrieving download url for %s", key)
-            return cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}/download-url").content
+            return cls.get(
+                f"{cls.ROOT}/addon/{addonID}/file/{fileID}/download-url"
+            ).content

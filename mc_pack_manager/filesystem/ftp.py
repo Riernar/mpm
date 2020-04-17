@@ -17,6 +17,7 @@ from ..filesystem import common
 
 LOGGER = utils.getLogger(__name__)
 
+
 class FTPPermissionError(common.FileSystemBaseError, utils.AutoFormatError):
     """
     Error for remote FTP filesystem with insufficient permissions
@@ -39,7 +40,7 @@ class FTPFileSystem(common.FileSystem):
         user: str,
         passwd: str,
         base_dir: common.PathLike,
-        use_tls:bool=False
+        use_tls: bool = False,
     ):
         """
         Creates a new filesystem object
@@ -65,7 +66,6 @@ class FTPFileSystem(common.FileSystem):
             raise FTPPermissionError(err=err, err_str=utils.err_str(err))
         self.tempdir = tempfile.TemporaryDirectory(dir=".")
 
-    
     @classmethod
     def from_url(cls, url: str):
         """
@@ -82,9 +82,9 @@ class FTPFileSystem(common.FileSystem):
             user=purl.username,
             passwd=purl.password,
             base_dir=purl.path,
-            use_tls=purl.scheme == "sftp"
+            use_tls=purl.scheme == "sftp",
         )
-    
+
     def close(self):
         """
         Clean up resources
@@ -109,7 +109,7 @@ class FTPFileSystem(common.FileSystem):
             if "cannot be listed" in err.args[0]:
                 return False
             raise
-    
+
     def is_file(self, path: common.PathLike):
         """
         Tests if a path is a file. Returns false if the path doesn't exists
@@ -121,7 +121,9 @@ class FTPFileSystem(common.FileSystem):
             True if the relative path exists and is a file, false otherwise
         """
         try:
-            return "type=file" in self.ftp.sendcmd("MLST %s" % (self.base_dir / path).as_posix())
+            return "type=file" in self.ftp.sendcmd(
+                "MLST %s" % (self.base_dir / path).as_posix()
+            )
         except ftplib.error_perm as err:
             if "cannot be listed" in err.args[0]:
                 return False
@@ -138,7 +140,9 @@ class FTPFileSystem(common.FileSystem):
             True if the relative path exists and is a directory, false otherwise
         """
         try:
-            return "type=dir" in self.ftp.sendcmd("MLST %s" % (self.base_dir / path).as_posix())
+            return "type=dir" in self.ftp.sendcmd(
+                "MLST %s" % (self.base_dir / path).as_posix()
+            )
         except ftplib.error_perm as err:
             if "cannot be listed" in err.args[0]:
                 return False
@@ -159,10 +163,7 @@ class FTPFileSystem(common.FileSystem):
             except ftplib.error_perm as err:
                 if "No such file or directory" in err.args[0]:
                     return
-                raise FTPPermissionError(
-                    err=err,
-                    err_str=utils.err_str(err)
-                )
+                raise FTPPermissionError(err=err, err_str=utils.err_str(err))
 
     def rmdir(self, path: common.PathLike):
         """
@@ -179,13 +180,11 @@ class FTPFileSystem(common.FileSystem):
             except ftplib.error_perm as err:
                 if "No such file or directory" in err.args[0]:
                     return
-                raise FTPPermissionError(
-                    err=err,
-                    err_str=utils.err_str(err)
-                )
+                raise FTPPermissionError(err=err, err_str=utils.err_str(err))
 
-
-    def move_file(self, path: common.PathLike, dest: common.PathLike, force:bool=False):
+    def move_file(
+        self, path: common.PathLike, dest: common.PathLike, force: bool = False
+    ):
         """
         Moves a file
 
@@ -206,8 +205,7 @@ class FTPFileSystem(common.FileSystem):
         else:
             raise FileNotFoundError("%s doesn't exist, cannot move it" % path)
 
-
-    def download(self, url: str, dest: common.PathLike, force:bool=False):
+    def download(self, url: str, dest: common.PathLike, force: bool = False):
         """
         Downloads a file from the web into the filesystem
 
@@ -220,17 +218,17 @@ class FTPFileSystem(common.FileSystem):
             if force:
                 self.unlink(dest)
             else:
-                raise FileExistsError("%s exists, cannot doawnload in that destination" % dest)
+                raise FileExistsError(
+                    "%s exists, cannot doawnload in that destination" % dest
+                )
         with tempfile.TemporaryFile(dir=self.tempdir) as tmp:
             tmp.write(requests.get(url).content)
             tmp.seek(0)
             self.ftp.storbinary(
-                cmd="STOR %s" % (self.base_dir / dest).as_posix(),
-                fp=tmp
+                cmd="STOR %s" % (self.base_dir / dest).as_posix(), fp=tmp
             )
 
-
-    def send_data(self, fp, dest: common.PathLike, force:bool=False):
+    def send_data(self, fp, dest: common.PathLike, force: bool = False):
         """
         Sends the content of a filelike object to dest
 
@@ -244,13 +242,11 @@ class FTPFileSystem(common.FileSystem):
                 self.unlink(dest)
             else:
                 raise FileExistsError("%s exists, cannot send data into it" % dest)
-        self.ftp.storbinary(
-            cmd="STOR %s" % (self.base_dir / dest).as_posix(),
-            fp=fp
-        )
+        self.ftp.storbinary(cmd="STOR %s" % (self.base_dir / dest).as_posix(), fp=fp)
 
-
-    def send_file(self, src: common.PathLike, dest: common.PathLike, force:bool=False):
+    def send_file(
+        self, src: common.PathLike, dest: common.PathLike, force: bool = False
+    ):
         """
         Sends a local file to the filesystem
 
@@ -265,12 +261,11 @@ class FTPFileSystem(common.FileSystem):
             else:
                 raise FileExistsError("%s exists, cannot send file into it" % dest)
         with open(src, mode="rb") as f:
-            self.ftp.storbinary(
-                cmd="STOR %s" % (self.base_dir / dest).as_posix(),
-                fp=f
-            )
+            self.ftp.storbinary(cmd="STOR %s" % (self.base_dir / dest).as_posix(), fp=f)
 
-    def send_dir(self, src: common.PathLike, dest: common.PathLike, force:bool=False):
+    def send_dir(
+        self, src: common.PathLike, dest: common.PathLike, force: bool = False
+    ):
         """
         Sends a local directory to the filesystem
 
@@ -306,17 +301,27 @@ class FTPFileSystem(common.FileSystem):
             path -- path to open relative to base_dir
             mode -- open mode. See built-ins open()
         """
-        mode = "t" if "t" in mode else "b"
-        tmp = tempfile.TemporaryFile(dir=self.tempdir, mode="w+" + mode)
-        if mode == "b":
+        if not isinstance(mode, utils.OpenMode):
+            mode = utils.parse_filemode(mode)
+        exists = self.exists(path)
+        download = False
+        if mode.file == utils.FileMode.READ or mode.file == utils.FileMode.APPEND:
+            if not exists:
+                raise FileNotFoundError(path)
+            download = True
+        elif mode.file == utils.FileMode.WRITE:
+            download = False
+        elif mode.file == utils.FileMode.CREATE:
+            if exists:
+                raise FileExistsError(path)
+            download = False
+        else:
+            raise ValueError("Unhandled FileMode value %s" % mode.file)
+        tmp = tempfile.TemporaryFile(dir=self.tempdir)
+        if download:
             self.ftp.retrbinary(
                 cmd="RETR %s" % (self.base_dir / path).as_posix(),
-                callback=lambda data: tmp.write(data)
+                callback=lambda data: tmp.write(data),
             )
-        elif mode == "t":
-            self.ftp.retrlines(
-                cmd="RETR %s" % (self.base_dir / path).as_posix(),
-                callback=lambda data: tmp.write(data)
-            )
-        tmp.seek(0)
-        return common.RemoteFileObject(fs=self, remote_path=path, tmp=tmp)
+            tmp.seek(0)
+        return common.RemoteFileObject(fs=self, remote_path=path, mode=mode, tmp=tmp)

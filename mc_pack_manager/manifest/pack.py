@@ -57,8 +57,6 @@ MANIFEST_SCHEMA = {
         # Should be "server" or one of the packmode defined above
         # But i couldn't find how to express that in json-schema
         "current-packmodes": {"type": "array", "items": {"type": "string"}},
-        # URL for the overrides (i.e. the .zip file outputed by curse)
-        "overrides-url": {"type": "string", "format": "uri"},
         # The list of mods, a list of object with exactly
         # the properties [addonID, fileID, packmode]
         "mods": {"type": "array", "items": {"$ref": "#/definitions/mod"}},
@@ -267,6 +265,7 @@ def read(filepath: PathLike):
     with filepath.open() as f:
         return load(f)
 
+
 def load(filelike):
     """
     Read a packmanifest from a filelike object
@@ -275,6 +274,7 @@ def load(filelike):
     validate(pack_manifest)
     pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
     return pack_manifest
+
 
 def from_str(string):
     pack_manifest = json.loads(string)
@@ -301,7 +301,7 @@ def check_packmodes(packmodes, packmode_list):
 
 def write(pack_manifest, filepath: Path):
     """
-    Write a pack manifest to a file. Doesn't validate it. Use "make_pack_manifest"
+    Write a pack manifest to a file. Doesn't validate it. Use "make"
     to ensure you create a proper pack manifest
 
     Arguments
@@ -312,6 +312,18 @@ def write(pack_manifest, filepath: Path):
         json.dump(pack_manifest, f, indent=4)
 
 
+def dump(pack_manifest, fp):
+    """
+    Write a pack manifest to a file-like object. Doesn't validate it, make() to make a
+    proper one.
+
+    Arguments
+        pack_manifest -- pack manifest to write
+        fp -- file object to write to
+    """
+    fp.write(json.dumps(pack_manifest, indent=4).encode("utf-8"))
+
+
 def make(
     pack_version: utils.Version,
     packmodes: Mapping[str, List[str]],
@@ -320,7 +332,6 @@ def make(
     override_cache: Mapping[str, str],
     *,
     current_packmodes: List[str] = None,
-    overrides_url: str = None
 ):
     """
     Creates and validates a new pack manifest
@@ -338,8 +349,6 @@ def make(
     pack_manifest = {"pack-version": str(pack_version), "packmodes": packmodes}
     if current_packmodes:
         pack_manifest["current-packmodes"] = current_packmodes
-    if overrides_url:
-        pack_manifest["overrides-url"] = overrides_url
     pack_manifest.update(
         {"mods": mods, "overrides": overrides, "override-cache": override_cache}
     )

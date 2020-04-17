@@ -15,14 +15,17 @@ from ..filesystem.ftp import FTPFileSystem
 
 LOGGER = utils.getLogger(__name__)
 
+
 class UnhandledURLError(FileSystemBaseError, utils.AutoFormatError):
     """
     Exception for url that cannot be converted to a FileSystem object
     """
+
     def __init__(self, url, message="No valid filesystem for url '{url}'"):
         super().__init__(message)
         self.url = url
         self.message = message
+
 
 def get_filesystem(fs_root: str) -> FileSystem:
     """
@@ -37,9 +40,9 @@ def get_filesystem(fs_root: str) -> FileSystem:
     if url.scheme == "" and url.netloc == "":
         LOGGER.info("Connecting to local filesystem")
         return LocalFileSystem(url.path)
-    elif url.scheme in  ("ftp", "sftp"):
+    elif url.scheme in ("ftp", "sftp"):
         LOGGER.info(
             "Connecting to remote filesystem over ftp %s TLS",
-            "with" if url.scheme == "sftp" else "*WITHOUT*"
+            "with" if url.scheme == "sftp" else "*WITHOUT*",
         )
         return FTPFileSystem.from_url(fs_root)

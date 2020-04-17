@@ -124,10 +124,12 @@ class PackmodeBaseGUI(BaseGUI, ABC):
         ui = {}
         ui["frame"] = ttk.LabelFrame(
             parent,
-            text=packmode_name + (
+            text=packmode_name
+            + (
                 "(depends on: %s)" % (", ".join(self.packmodes[packmode_name]))
-                if self.packmodes[packmode_name] else ""
-            )
+                if self.packmodes[packmode_name]
+                else ""
+            ),
         )
         ui["selector"] = self.SelectorClass(master=ui["frame"], values=[])
         ui["selector"].pack(side="top", expand=True, fill="both")
@@ -166,9 +168,11 @@ class PackmodeBaseGUI(BaseGUI, ABC):
         for packmode, ui in self.packmode_uis.items():
             ui["frame"].grid_forget()
             ui["frame"].config(
-                text=packmode + (
+                text=packmode
+                + (
                     "(depends on: %s)" % (", ".join(self.packmodes[packmode]))
-                    if self.packmodes[packmode] else ""
+                    if self.packmodes[packmode]
+                    else ""
                 )
             )
         for i, (packmode, ui) in enumerate(sorted(self.packmode_uis.items())):

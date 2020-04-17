@@ -6,6 +6,7 @@ Miscellaneous utilities
 # Standard lib import
 from collections import namedtuple
 from collections.abc import Iterable
+import enum
 from functools import wraps
 import hashlib
 import inspect
@@ -19,6 +20,35 @@ LOGGER = logging.getLogger("mpm.utils")
 T = TypeVar("T")
 
 Node = namedtuple("Node", ["value"])
+
+
+class FileMode(enum.Enum):
+    READ = "r"
+    WRITE = "w"
+    CREATE = "x"
+    APPEND = "a"
+
+
+class DataMode(enum.Enum):
+    BYTES = "b"
+    TEXT = "t"
+
+
+OpenMode = namedtuple("FileMode", ["file", "data", "update"])
+
+
+def parse_filemode(mode: str) -> OpenMode:
+    file_t = [char for char in mode if char in FileMode]
+    if len(file_t) > 1:
+        raise ValueError("Multiple values for open mode")
+    text_t = [char for char in mode if char in DataMode]
+    if len(text_t) > 1:
+        raise ValueError("Multiple values for text mode")
+    return FileMode(
+        file=OpenMode(file_t[0]) if file_t else FileMode.READ,
+        data=DataMode(text_t[0]) if text_t else DataMode.TEXT,
+        update="+" in mode,
+    )
 
 
 class Version:
@@ -230,8 +260,9 @@ def err_str(err):
 def err_traceback(err):
     return "".join(format_tb(err.__traceback__))
 
+
 def getLogger(name):
     """
     Returns the logger with the first part of the name changed to "mpm"
     """
-    return logging.getLogger(".".join(["mpm"] +  name.split(".")[1:]))
+    return logging.getLogger(".".join(["mpm"] + name.split(".")[1:]))

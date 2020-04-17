@@ -16,30 +16,36 @@ from typing import Union
 from .. import utils
 
 PathLike = Union[str, PurePath]
-Mode = Union["b", "t"]
 
 LOGGER = utils.getLogger(__name__)
+
 
 class FileSystemBaseError(Exception):
     """
     Base error for filesystem operation
     """
 
+
 class InvalidURL(FileSystemBaseError, utils.AutoFormatError):
     """
     The URL is not an FTP url
     """
-    def __init__(self, url, fstype, message="{url} is invalid for a {fstype} filesystem"):
+
+    def __init__(
+        self, url, fstype, message="{url} is invalid for a {fstype} filesystem"
+    ):
         super().__init__(message)
         self.url = url
         self.fstype = fstype
         self.message = message
+
 
 class FileSystem(ABC):
     """
     Class for abstracting a filesystem, local or remote with various
     connexion protocols, into a single object
     """
+
     def __init__(self, base_dir: PathLike):
         super().__init__()
         self.base_dir = PurePath(base_dir)
@@ -55,7 +61,7 @@ class FileSystem(ABC):
         Context manager implementation
         """
         self.close()
-    
+
     @abstractmethod
     def close(self):
         """
@@ -73,7 +79,7 @@ class FileSystem(ABC):
         Return
             True if the path exists, False, otherwise
         """
-    
+
     @abstractmethod
     def is_file(self, path: PathLike):
         """
@@ -117,7 +123,7 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def move_file(self, path: PathLike, dest: PathLike, force:bool=False):
+    def move_file(self, path: PathLike, dest: PathLike, force: bool = False):
         """
         Moves a file
 
@@ -128,7 +134,7 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def download(self, url: str, dest: PathLike, force:bool=False):
+    def download(self, url: str, dest: PathLike, force: bool = False):
         """
         Downloads a file from the web into the filesystem
 
@@ -139,7 +145,7 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def send_data(self, fp, dest: PathLike, force:bool=False):
+    def send_data(self, fp, dest: PathLike, force: bool = False):
         """
         Sends the content of a filelike object to dest
 
@@ -150,7 +156,7 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def send_file(self, src: PathLike, dest: PathLike, force:bool=False):
+    def send_file(self, src: PathLike, dest: PathLike, force: bool = False):
         """
         Sends a local file to the filesystem
 
@@ -161,7 +167,7 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def send_dir(self, src: PathLike, dest: PathLike, force:bool=False):
+    def send_dir(self, src: PathLike, dest: PathLike, force: bool = False):
         """
         Sends a local directory to the filesystem
 
@@ -172,7 +178,7 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def open(self, path: PathLike, mode: str):
+    def open(self, path: PathLike, mode: Union[str, utils.OpenMode]):
         """
         Open a file on the filesystem
 
@@ -182,42 +188,59 @@ class FileSystem(ABC):
         """
 
 
-
 class RemoteFileObject:
     """
     File-like object to open a remote file and then synchronize it
     """
-    def __init__(self, fs: FileSystem, remote_path: PathLike, tmp: tempfile.TemporaryFile):
+
+    def __init__(
+        self,
+        fs: FileSystem,
+        remote_path: PathLike,
+        mode: utils.OpenMode,
+        tmp: tempfile.TemporaryFile,
+    ):
         self.fs = fs
         self.tmp = tmp
+        self.mode = utils.OpenMode
         self.remote_path = remote_path
+
+        self.file_handler = open(
+            self.tmp.name, mode=mode.file + mode.data + ("+" if mode.update else "")
+        )
 
     def __enter__(self):
         self.tmp.__enter__()
-    
+        return self.file_handler
+
     def __exit__(self, exc_type, exc_value, traceback):
+        self.file_handler.close()
         self.tmp.flush()
         self.tmp.seek(0)
         self.fs.send_data(self.tmp, self.remote_path, force=True)
         self.tmp.__exit__(exc_type, exc_value, traceback)
-    
+
     def close(self):
+        self.file_handler.close()
         self.tmp.flush()
         self.tmp.seek(0)
         self.fs.send_data(self.tmp, self.remote_path, force=True)
         self.tmp.close()
-    
+
+    def __iter__(self):
+        return iter(self.file_handler)
+
     def write(self, *args, **kwargs):
-        self.tmp.write(*args, **kwargs)
-    
+        self.file_handler.write(*args, **kwargs)
+
     def read(self, *args, **kwargs):
-        self.tmp.read(*args, **kwargs)
-    
+        self.file_handler.read(*args, **kwargs)
+
     def seek(self, *args, **kwargs):
-        self.tmp.seek(*args, **kwargs)
-    
+        self.file_handler.seek(*args, **kwargs)
+
     def flush(self, *args, **kwargs):
-        self.tmp.flush(*args, **kwargs)
-    
+        self.file_handler.flush(*args, **kwargs)
+
     def readlines(self, *args, **kwargs):
-        self.tmp.readlines(*args, **kwargs)
+        self.file_handler.readlines(*args, **kwargs)
