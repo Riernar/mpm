@@ -231,7 +231,7 @@ def get_default(with_override_url: bool = False):
 
 def read_from(dir_: Union[str, Path]):
     """
-    Load the pack-manifest.json file from dir ro defaults to the default manifest
+    Load the pack-manifest.json file from dir or defaults to the default manifest
 
     Arguments
         dir -- the directory to load the manifest from
