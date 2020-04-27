@@ -5,10 +5,11 @@ Part of the Minecraft Pack Manager utility (mpm)
 """
 # Standard library import
 from copy import deepcopy
+import tkinter.messagebox as mbox
 import logging
 
 # Local import
-from ..ui.impl import ModGUI, OverridesGUI
+from ..ui.packmodes import ModGUI, OverridesGUI
 
 LOGGER = logging.getLogger("mpm.ui")
 
@@ -54,3 +55,19 @@ def assign_overrides(packmodes, overrides, override_cache, added_override=None):
     )
     gui.run()
     return gui.packmodes, gui.overrides
+
+def confirm_install() -> bool:
+    """
+    Confirms that update should be performed on an empty install
+    """
+    message = (
+        "The pack you are trying to update doesn't have a pack-manifest.json file"
+        "Unless you are doing a first install, *THIS SHOULD NOT HAPPEN*. If you are doing a first install, just click 'OK'\n"
+        "Your pack is currently broken from MPM point of view, but should still run."
+        "If you proceed, the udpate process will duplicate mods and add conflicting overrides:"
+        "this *WILL BREAK* your pack for minecraft too. It is advised to cancel"
+    )
+    return mbox.askokcancel(
+        title="Confirm Update",
+        message=message
+    )

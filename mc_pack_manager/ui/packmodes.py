@@ -1,5 +1,5 @@
 """
-User Interface implementation
+User Interface implementation for packmodes assignement
 
 Part of the Minecraft Pack Manager utility (mpm)
 """

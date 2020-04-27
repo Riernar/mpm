@@ -39,7 +39,7 @@ class FTPFileSystem(common.FileSystem):
         host: str,
         user: str,
         passwd: str,
-        base_dir: common.PathLike,
+        base_dir: common.PathLike = ".",
         use_tls: bool = False,
     ):
         """

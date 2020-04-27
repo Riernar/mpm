@@ -6,12 +6,13 @@ Part of the Minecraft Pack Manager utility (mpm)
 # Standard library import
 import json
 import logging
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Union
 import zipfile
 
 # Local import
 from .. import manifest
+from .. import _filelist
 from ..manager import common
 
 LOGGER = logging.getLogger("mpm.manager.release")
@@ -49,7 +50,7 @@ def curse(
     output_zip: PathLike,
     packmodes=None,
     force=False,
-    include_mpm=False,
+    mpm_filepath=None
 ):
     """
     Creates a .zip of the same format as curse/twitch that can be used to do a fresh install
@@ -61,7 +62,8 @@ def curse(
         output_file -- path to the output file to produce
         packmodes -- list of packmodes to include into the created .zip. Defaults to everything
         force -- erase output_zip if it already exists
-        include_mpm -- bundle this pack manager into the .zip, so that it is part of the pack
+        mpm_filepath -- if provided, bundle this pack manager into the .zip, so that it is part of the pack.
+            The argument must be the path to the "mpm.py" file
     """
     # File checks and opening
     pack_dir = Path(pack_dir)
@@ -91,7 +93,7 @@ def curse(
         "Selected mods:\n%s", common.format_modlist(selected_mods, print_version=True)
     )
     # Create new manifest
-    LOGGER.info("Generating new manifest")
+    LOGGER.info("Generating new manifest with selected mods")
     curse_manifest["files"] = [
         {"projectID": mod["addonID"], "fileID": mod["fileID"], "required": True}
         for mod in selected_mods
@@ -130,14 +132,36 @@ def curse(
                     filename=sub_extra, arcname=sub_extra.relative_to(pack_dir)
                 )
     ## Include MPM
-    if include_mpm:
+    if mpm_filepath is not None:
         LOGGER.info("Adding mpm to .zip archive")
-        LOGGER.fatal("ADDING MPM IS NOT YET SUPPORTED !")
+        mpm_filepath = Path(mpm_filepath)
+        arcname_root = PurePath("overrides/mpm")
+        LOGGER.debug("Adding %s", mpm_filepath.name)
+        archive.write(
+            filename=mpm_filepath,
+            arcname=arcname_root / mpm_filepath.name
+        )
+        LOGGER.debug("Adding %s", "requirements.txt")
+        archive.write(
+            filename=mpm_filepath.parent / "requirements.txt",
+            arcname=arcname_root / "requirements.txt"
+        )
+        for source_file in _filelist.MPM_SRC_FILES:
+            LOGGER.debug("Adding %s", source_file.relative_to(mpm_filepath.parent))
+            archive.write(
+                filename=source_file,
+                arcname=arcname_root / source_file.relative_to(mpm_filepath.parent)
+            )
     archive.close()
     LOGGER.info("Done !")
 
 
-def release_zip():
+def release_zip(
+    pack_dir: PathLike,
+    output_zip: PathLike,
+    packmodes=None,
+    force=False
+):
     """
     Creates a .zip that readily contains mods and everything else for the pack. Useful to make
         server files for instance.
@@ -145,8 +169,11 @@ def release_zip():
     
     Arguments
         pack_dir -- local dir containing the pack manager's modpack representation (see snapshot())
-        output_file -- path to the output file to produce
+        output_zip -- path to the output file to produce
         packmodes -- list of packmodes to include into the created .zip. Can be "ALL" to include them all
-        include_mpm -- bundle this pack manager into the .zip, so that it is part of the pack
+        force -- erase output_zip if it already exists
+        mpm_filepath -- if provided, bundle this pack manager into the .zip, so that it is part of the pack.
+            The argument must be the path to the "mpm.py" file
     """
+    
     raise NotImplementedError

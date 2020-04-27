@@ -81,7 +81,10 @@ class LocalFileSystem(common.FileSystem):
             path -- path relative to base_dir to delete
         """
         path = self.base_dir / Path(path)
-        path.unlink()
+        if path.is_dir():
+            raise IsADirectoryError("Cannot unlink directory %s, use rmdir instead" % path)
+        if path.is_file():
+            path.unlink()
 
     def rmdir(self, path: common.PathLike):
         """
@@ -92,7 +95,7 @@ class LocalFileSystem(common.FileSystem):
         """
         p = self.base_dir / Path(path)
         if p.is_file():
-            raise NotADirectoryError("%s is not a directory" % path)
+            raise NotADirectoryError("Cannot rmdir file %s, use unlink instead" % path)
         if p.exists():
             shutil.rmtree(p, ignore_errors=True)
 
@@ -122,10 +125,12 @@ class LocalFileSystem(common.FileSystem):
             dest -- destination file
             force -- overwrite destination file if it exists
         """
-        if not force and self.exists(dest):
+        dest = self.base_dir / dest
+        if not force and dest.exists():
             raise FileExistsError(
                 "%s exists, cannot download in that destination" % dest
             )
+        dest.parent.mkdir(exist_ok=True, parents=True)
         with (self.base_dir / Path(dest)).open("wb") as f:
             f.write(requests.get(url).content)
 
@@ -138,7 +143,8 @@ class LocalFileSystem(common.FileSystem):
             dest -- destination file
             force -- overwrite dest if it exists
         """
-        if not force and self.exists(dest):
+        dest = self.base_dir / dest
+        if not force and dest.exists():
             raise FileExistsError("%s exists, cannot send data into it" % dest)
         data = fp.read(1)
         if isinstance(data, str):
@@ -165,10 +171,10 @@ class LocalFileSystem(common.FileSystem):
             dest -- destination file
             force -- overwrite dest if it exists
         """
-        if not force and self.exists(dest):
+        dest = self.base_dir / dest
+        if not force and dest.exists():
             raise FileExistsError("%s exists, cannot send file into it" % dest)
-        src = Path(src)
-        dest = Path(dest)
+        dest.parent.mkdir(exist_ok=True, parents=True)
         shutil.copyfile(src=src, dst=dest)
 
     def send_dir(
@@ -190,7 +196,9 @@ class LocalFileSystem(common.FileSystem):
                 raise FileExistsError("%s exists, cannot send dir into it" % dest)
         if not src.is_dir():
             raise NotADirectoryError("%s is not a directory, cannot send it" % src)
-        shutil.copytree(src=src, dst=self.base_dir / Path(dest))
+        dest = self.base_dir / dest
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src=src, dst=dest)
 
     def open(self, path: common.PathLike, mode="t"):
         """

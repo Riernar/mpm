@@ -218,14 +218,12 @@ def validate(pack_manifest):
         raise
 
 
-def get_default(with_override_url: bool = False):
+def get_default():
     """
     Returns a new default manifest in JSON
     """
     pack_manifest = deepcopy(DEFAULT_MANIFEST)
     pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
-    if with_override_url:
-        pack_manifest["overrides-url"]: ""
     return pack_manifest
 
 
