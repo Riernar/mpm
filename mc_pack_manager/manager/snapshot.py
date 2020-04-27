@@ -97,7 +97,6 @@ def snapshot(pack_dir: PathLike, curse_zip: PathLike, version_incr=0):
             overrides=overrides,
             override_cache=new_override_cache,
             current_packmodes=pack_manifest.get("current-packmodes"),
-            overrides_url=pack_manifest.get("overrides-url"),
         )
 
         # New repr creation

@@ -56,22 +56,29 @@ if __name__ == "__main__":
     )
 
     # Snapshot subcommand
-    snapshot_parser = subparsers.add_parser("snapshot", help="Creates a snapshot, an enriched representation of a modpack, from a curse-generated zip")
+    snapshot_parser = subparsers.add_parser(
+        "snapshot",
+        help="Creates a snapshot, an enriched representation of a modpack, from a curse-generated zip",
+    )
     snapshot_parser.description = (
         "Creates or updates a snapshot of the curse pack into pack_dir"
     )
     snapshot_parser.add_argument(
-        "curse_zip", type=Path, help="path to the zip file exported by the curse/twitch app"
+        "curse_zip",
+        type=Path,
+        help="path to the zip file exported by the curse/twitch app",
     )
     snapshot_parser.add_argument(
         "pack_dir",
         type=Path,
         help="Local dir in which to build or update the modpack representation",
     )
-    
 
     # Release subcommands
-    release_parser = subparsers.add_parser("release", help="make various zip, used for releasing the pack, from snapshots (see 'mpm snapshot')")
+    release_parser = subparsers.add_parser(
+        "release",
+        help="make various zip, used for releasing the pack, from snapshots (see 'mpm snapshot')",
+    )
     release_parser.description = "Creates zip file for various release format"
     release_subparser = release_parser.add_subparsers(
         dest="release_type", required=True, help="Specific release type"
@@ -80,9 +87,7 @@ if __name__ == "__main__":
     mpm_release_parser = release_subparser.add_parser(
         "mpm", help="Release containing the full snapshot. Used for updating with MPM"
     )
-    mpm_release_parser.description = (
-        "Creates a release zip compatible with MPM, used for updating with MPM (see 'mpm update')"
-    )
+    mpm_release_parser.description = "Creates a release zip compatible with MPM, used for updating with MPM (see 'mpm update')"
     mpm_release_parser.add_argument(
         "pack_dir",
         type=Path,
@@ -99,7 +104,8 @@ if __name__ == "__main__":
     )
     ## Curse release
     curse_release_parser = release_subparser.add_parser(
-        "curse", help="Release compatible with curse. Used to a set of packmodes as a standard curse modpack"
+        "curse",
+        help="Release compatible with curse. Used to a set of packmodes as a standard curse modpack",
     )
     curse_release_parser.description = (
         "Creates a release .zip compatible with curse and the twitch app"
@@ -130,12 +136,70 @@ if __name__ == "__main__":
         help="Packmodes to export to the release. MPM will only include mods and overrides belonging to those packmodes or packmodes they depend on. Defaults to all packmodes",
         default=[],
     )
-
+    ## Server release
+    server_release_parser = release_subparser.add_parser(
+        "serverfiles", help="Release ready for a server with mods jars and overrides"
+    )
+    server_release_parser.description = "Release containing all files necessary to run the selected packmodes. Contains mod JAR file ! Be mindfule of mod licences before ditributing the release ! WARNING: this does *not* contains forge or minecraft"
+    server_release_parser.add_argument(
+        "pack_dir",
+        type=Path,
+        help="Snapshot directory were the snapshot was generated using 'mpm snapshot'",
+    )
+    server_release_parser.add_argument(
+        "output_zip", type=Path, help="Path to the zip file to create"
+    )
+    server_release_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="overwrite the output zip if it already exists",
+    )
+    server_release_parser.add_argument(
+        "--include-mpm",
+        action="store_true",
+        help="Bundle MPM into the release, ready to use fo auto-updates",
+    )
+    server_release_parser.add_argument(
+        "packmodes",
+        metavar="packmode",
+        nargs="*",
+        help="Packmodes to export to the release. MPM will only include mods and overrides belonging to those packmodes or packmodes they depend on. Defaults to 'server'",
+        default=[],
+    )
 
     # Update subcommand
-    update_parser = subparsers.add_parser("update", help="updates a modpack dir from an mpm release (see 'mpm release mpm')")
-    update_parser.description = "Updates pack to a new version and/or a different set of packmodes"
-
+    update_parser = subparsers.add_parser(
+        "update",
+        help="updates a modpack dir from an mpm release (see 'mpm release mpm')",
+    )
+    update_parser.description = (
+        "Updates a pack installation to a different version and/or set of packmodes"
+    )
+    install_group = update_parser.add_mutually_exclusive_group(required=True)
+    install_group.add_argument(
+        "--pack-local",
+        type=Path,
+        metavar="PATH",
+        help="Path to the local installation directory to update (./minecraft dir)",
+    )
+    install_group.add_argument(
+        "--pack-ftp",
+        metavar="URL",
+        help="FTP url to a remote installation to update, pointing to the remote ./minecraft directory",
+    )
+    update_group = update_parser.add_mutually_exclusive_group(required=True)
+    update_group.add_argument(
+        "--update-zip",
+        metavar="PATH",
+        type=Path,
+        help="Path to a local .zip generated by 'mpm release mpm'",
+    )
+    update_group.add_argument(
+        "--update-http",
+        metavar="URL",
+        help="HTTP(S) url to a server exposing the content of an mpm release generated by 'mpm release mpm' (e.g. github repo, webserver ...)",
+    )
 
     # Argument parsing
     args = parser.parse_args()
@@ -161,6 +225,33 @@ if __name__ == "__main__":
                     force=args.force,
                     mpm_filepath=MPM_FILE if args.include_mpm else None,
                 )
+            elif args.release_type == "serverfiles":
+                mpm.manager.release.serverfiles(
+                    pack_dir=args.pack_dir,
+                    output_zip=args.output_zip,
+                    packmodes=args.packmodes,
+                    force=args.force,
+                    mpm_filepath=MPM_FILE if args.include_mpm else None,
+                )
+        elif args.command == "update":
+            if "pack_local" in args:
+                if "update_zip" in args:
+                    mpm.manager.update.update_zip(
+                        pack_path=args.pack_local, zip_path=args.update_zip
+                    )
+                elif "update_http" in args:
+                    mpm.manager.update.update_http(
+                        pack_path=args.pack_local, http_url=args.update_http
+                    )
+            elif "install_ftp" in args:
+                if "update_zip" in args:
+                    mpm.manager.update.update_remote_zip(
+                        ftp_url=args.install_ftp, zip_path=args.update_zip
+                    )
+                elif "update_http" in args:
+                    mpm.manager.update.update_remote_http(
+                        ftp_url=args.install_ftp, http_url=args.update_http
+                    )
 
     except Exception as err:
         LOGGER.error(
@@ -168,8 +259,7 @@ if __name__ == "__main__":
             mpm.utils.err_str(err),
         )
         LOGGER.debug(
-            "Detailed statcktrace:\n%s",
-            "".join(traceback.format_tb(err.__traceback__))
+            "Detailed statcktrace:\n%s", "".join(traceback.format_tb(err.__traceback__))
         )
         print(
             "An exception occured, see above. The full stacktrace is available in the log file"

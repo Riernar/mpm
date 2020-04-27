@@ -7,11 +7,13 @@ Part of the Minecraft Pack Manager utility (mpm)
 import json
 import logging
 from pathlib import Path, PurePath
+import requests
 from typing import Union
 import zipfile
 
 # Local import
 from .. import manifest
+from .. import network
 from .. import _filelist
 from ..manager import common
 
@@ -50,7 +52,7 @@ def curse(
     output_zip: PathLike,
     packmodes=None,
     force=False,
-    mpm_filepath=None
+    mpm_filepath=None,
 ):
     """
     Creates a .zip of the same format as curse/twitch that can be used to do a fresh install
@@ -137,30 +139,28 @@ def curse(
         mpm_filepath = Path(mpm_filepath)
         arcname_root = PurePath("overrides/mpm")
         LOGGER.debug("Adding %s", mpm_filepath.name)
-        archive.write(
-            filename=mpm_filepath,
-            arcname=arcname_root / mpm_filepath.name
-        )
+        archive.write(filename=mpm_filepath, arcname=arcname_root / mpm_filepath.name)
         LOGGER.debug("Adding %s", "requirements.txt")
         archive.write(
             filename=mpm_filepath.parent / "requirements.txt",
-            arcname=arcname_root / "requirements.txt"
+            arcname=arcname_root / "requirements.txt",
         )
         for source_file in _filelist.MPM_SRC_FILES:
             LOGGER.debug("Adding %s", source_file.relative_to(mpm_filepath.parent))
             archive.write(
                 filename=source_file,
-                arcname=arcname_root / source_file.relative_to(mpm_filepath.parent)
+                arcname=arcname_root / source_file.relative_to(mpm_filepath.parent),
             )
     archive.close()
     LOGGER.info("Done !")
 
 
-def release_zip(
+def serverfiles(
     pack_dir: PathLike,
     output_zip: PathLike,
     packmodes=None,
-    force=False
+    force=False,
+    mpm_filepath=None,
 ):
     """
     Creates a .zip that readily contains mods and everything else for the pack. Useful to make
@@ -175,5 +175,71 @@ def release_zip(
         mpm_filepath -- if provided, bundle this pack manager into the .zip, so that it is part of the pack.
             The argument must be the path to the "mpm.py" file
     """
-    
-    raise NotImplementedError
+    # File checks and opening
+    pack_dir = Path(pack_dir)
+    output_zip = Path(output_zip)
+    common.check_snapshot_dir(pack_dir)
+    # Read manifest
+    pack_manifest = manifest.pack.read_from(pack_dir)
+    # Check packmodes
+    if packmodes:
+        manifest.pack.check_packmodes(pack_manifest["packmodes"], packmodes)
+    else:
+        LOGGER.info("No 'packmodes' argument, defaulting to 'server'")
+        packmodes = {"server"}
+    # Open zip archive
+    LOGGER.info("Opening .zip file")
+    archive = zipfile.ZipFile(
+        output_zip,
+        mode="w" if force else "x",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=6,
+    )
+    # Compute mods
+    selected_mods = manifest.pack.get_selected_mods(pack_manifest, packmodes)
+    LOGGER.debug(
+        "Selected mods:\n%s", common.format_modlist(selected_mods, print_version=True)
+    )
+    LOGGER.info("Downloading %s mods to zip archive. This will take a while !", len(selected_mods))
+    mod_dir = PurePath("mods/")
+    for mod in selected_mods:
+        addonID, fileID = mod["addonID"], mod["fileID"]
+        LOGGER.info("  - %s", mod.get("name", f"{addonID}/{fileID}"))
+        if "filename" in mod:
+            jarname = mod["filename"]
+        else:
+            jarname = network.TwitchAPI.get_file_info(addonID, fileID)["fileName"]
+        archive.writestr(
+            str(mod_dir / jarname),
+            requests.get(network.TwitchAPI.get_download_url(addonID, fileID)).content,
+        )
+    # Compute overrides
+    selected_overrides = manifest.pack.get_selected_overrides(pack_manifest, packmodes)
+    LOGGER.debug(
+        "Selected overrides:\n  - %s", "\n  - ".join(selected_overrides.keys()),
+    )
+    # Compress overrides
+    LOGGER.info("Adding selected overrides to zip archive")
+    for filepath in selected_overrides.keys():
+        path = pack_dir / "overrides" / filepath
+        archive.write(filename=path, arcname=filepath)
+    ## Include MPM
+    if mpm_filepath is not None:
+        LOGGER.info("Adding mpm to zip archive")
+        mpm_filepath = Path(mpm_filepath)
+        arcname_root = PurePath("mpm")
+        LOGGER.debug("Adding %s", mpm_filepath.name)
+        archive.write(filename=mpm_filepath, arcname=arcname_root / mpm_filepath.name)
+        LOGGER.debug("Adding %s", "requirements.txt")
+        archive.write(
+            filename=mpm_filepath.parent / "requirements.txt",
+            arcname=arcname_root / "requirements.txt",
+        )
+        for source_file in _filelist.MPM_SRC_FILES:
+            LOGGER.debug("Adding %s", source_file.relative_to(mpm_filepath.parent))
+            archive.write(
+                filename=source_file,
+                arcname=arcname_root / source_file.relative_to(mpm_filepath.parent),
+            )
+    archive.close()
+    LOGGER.info("Done !")
