@@ -307,10 +307,10 @@ def write(pack_manifest, filepath: Path):
         filepath -- destination file
     """
     with Path(filepath).open("w") as f:
-        json.dump(pack_manifest, f, indent=4)
+        json.dump(pack_manifest, f, indent=4, cls=utils.SerializableClassJSONEncoder)
 
 
-def dump(pack_manifest, fp):
+def dump(pack_manifest, fp, encode=True):
     """
     Write a pack manifest to a file-like object. Doesn't validate it, make() to make a
     proper one.
@@ -318,8 +318,10 @@ def dump(pack_manifest, fp):
     Arguments
         pack_manifest -- pack manifest to write
         fp -- file object to write to
+        encode -- writes as bytes. If false, writes as str and let's the file object handle the encoding
     """
-    fp.write(json.dumps(pack_manifest, indent=4).encode("utf-8"))
+    data = json.dumps(pack_manifest, indent=4, cls=utils.SerializableClassJSONEncoder)
+    fp.write(data.encode("utf-8") if encode else data)
 
 
 def make(
@@ -351,7 +353,41 @@ def make(
         {"mods": mods, "overrides": overrides, "override-cache": override_cache}
     )
     validate(pack_manifest)
+    pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
     return pack_manifest
+
+def copy(
+    pack_manifest,
+    *,
+    pack_version: utils.Version=None,
+    packmodes: Mapping[str, List[str]]=None,
+    mods: List[Mapping[str, str]]=None,
+    overrides: Mapping[str, str]=None,
+    override_cache: Mapping[str, str]=None,
+    current_packmodes: List[str] = None,
+):
+    """
+    Creates a copy of a manifest, with possible modifications, and validates it
+
+    Arguments:
+        See the json schema MANIFEST_SCHEMA for the schema of a pack manifest
+    
+    Returns
+        A validated copy of the original pack manifest
+    
+    Raises
+        See validate_pack_manifest()
+    """
+    args = locals()
+    LOGGER.info("Copying pack manifest with modifications")
+    new_manifest = deepcopy(pack_manifest)
+    for (arg, value) in args.items():
+        if arg != "pack_manifest" and value is not None:
+            new_manifest[arg.replace("_", "-")] = value
+    new_manifest["pack-version"] = str(new_manifest.get("pack-version", "0.0.0"))
+    validate(new_manifest)
+    new_manifest["pack-version"] = utils.Version(new_manifest["pack-version"])
+    return new_manifest
 
 
 def get_override_packmode(
@@ -393,15 +429,15 @@ def get_all_dependencies(packmodes, packmode_list) -> Set[str]:
         set of packmode_list and all their dependencies
     """
     check_packmodes(packmodes, packmode_list)
-    packmodes = {"server"}
+    dependencies = {"server"}
     stack = list(packmode_list)
     while stack:
         pkm = stack.pop()
-        if pkm not in packmodes:
-            packmodes.add(pkm)
-            for dep in packmodes[pkm]:
+        if pkm not in dependencies:
+            dependencies.add(pkm)
+            for dep in packmodes.get(pkm, []):
                 stack.append(dep)
-    return packmodes
+    return dependencies
 
 
 def get_selected_mods(pack_manifest, packmode_list):

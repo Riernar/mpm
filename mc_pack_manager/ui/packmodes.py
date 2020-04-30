@@ -126,8 +126,8 @@ class PackmodeBaseGUI(BaseGUI, ABC):
             parent,
             text=packmode_name
             + (
-                "(depends on: %s)" % (", ".join(self.packmodes[packmode_name]))
-                if self.packmodes[packmode_name]
+                " (depends on: %s)" % (", ".join(self.packmodes.get(packmode_name, [])))
+                if self.packmodes.get(packmode_name, [])
                 else ""
             ),
         )
@@ -170,8 +170,8 @@ class PackmodeBaseGUI(BaseGUI, ABC):
             ui["frame"].config(
                 text=packmode
                 + (
-                    "(depends on: %s)" % (", ".join(self.packmodes[packmode]))
-                    if self.packmodes[packmode]
+                    " (depends on: %s)" % (", ".join(self.packmodes.get(packmode, [])))
+                    if self.packmodes.get(packmode, [])
                     else ""
                 )
             )

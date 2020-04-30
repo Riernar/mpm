@@ -6,7 +6,7 @@ Part of the Minecraft Pack Manager utility (mpm)
 # Standard library imports
 import ftplib
 import logging
-from pathlib import Path
+from pathlib import Path, PurePath
 import requests
 import tempfile
 import urllib.parse
@@ -60,11 +60,15 @@ class FTPFileSystem(common.FileSystem):
         else:
             self.ftp = ftplib.FTP(host)
             self.ftp.login(user=user, passwd=passwd)
+        # test MLST command support
         try:
-            self.ftp.cwd(self.base_dir.as_posix())
-        except ftplib.error_perm as err:
-            raise FTPPermissionError(err=err, err_str=utils.err_str(err))
+            list(self.ftp.mlsd())
+            self._mlsd_support = True
+        except ftplib.error_perm:
+            self._mlsd_support = False
+            LOGGER.warn("The FTP server does not support the MLSD command. Falling back to NLST, this may cause problems")
         self.tempdir = tempfile.TemporaryDirectory(dir=".")
+        self.tempdirpath = Path(self.tempdir.__enter__())
 
     @classmethod
     def from_url(cls, url: str):
@@ -81,17 +85,45 @@ class FTPFileSystem(common.FileSystem):
             host=purl.hostname,
             user=purl.username,
             passwd=purl.password,
-            base_dir=purl.path,
+            base_dir=purl.path.strip("/"),
             use_tls=purl.scheme == "sftp",
         )
 
-    def close(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         """
         Clean up resources
         """
         self.ftp.quit()
-        self.tempdir.cleanup()
+        self.tempdir.__exit__(exc_type, exc_value, traceback)
+        
 
+    def _exists(self, path: common.PathLike):
+        path = PurePath(path)
+        if self._mlsd_support:
+            try:
+                self.ftp.sendcmd("MLST %s" % path.as_posix())
+                return True
+            except ftplib.error_perm as err:
+                if "cannot be listed" in err.args[0]:
+                    return False
+                raise
+        else:
+            if str(path) == ".":
+                LOGGER.debug("No MLSD support mode: '.' always exists")
+                return True
+            try:
+                lst = self.ftp.nlst(path.parent.as_posix())
+                LOGGER.debug("No MLSD support mode: trying NLST on parent of '%s', got %s", path, lst)
+                if str(path) in lst:
+                    LOGGER.debug("'%s' exists", path)
+                    return True
+                else:
+                    LOGGER.debug("'%s' does not exists", path)
+                    return False
+            except Exception as err:
+                LOGGER.debug("NLST failed with %s, considering %s doesn't exists", utils.err_str(err), path)
+                return False
+    
     def exists(self, path: common.PathLike):
         """
         Determines if the path points to something
@@ -102,13 +134,8 @@ class FTPFileSystem(common.FileSystem):
         Return
             True if the path exists, False, otherwise
         """
-        try:
-            self.ftp.sendcmd("MLST %s" % (self.base_dir / path).as_posix())
-            return True
-        except ftplib.error_perm as err:
-            if "cannot be listed" in err.args[0]:
-                return False
-            raise
+        return self._exists(self.base_dir / path)
+
 
     def is_file(self, path: common.PathLike):
         """
@@ -120,16 +147,31 @@ class FTPFileSystem(common.FileSystem):
         Returns
             True if the relative path exists and is a file, false otherwise
         """
-        try:
-            return "type=file" in self.ftp.sendcmd(
-                "MLST %s" % (self.base_dir / path).as_posix()
-            )
-        except ftplib.error_perm as err:
-            if "cannot be listed" in err.args[0]:
+        if self._mlsd_support:
+            try:
+                return "type=file" in self.ftp.sendcmd(
+                    "MLST %s" % (self.base_dir / path).as_posix()
+                )
+            except ftplib.error_perm as err:
+                if "cannot be listed" in err.args[0]:
+                    return False
+                raise
+        else:
+            if not self.exists(path):
                 return False
-            raise
+            current = self.ftp.pwd()
+            try:
+                self.ftp.cwd((self.base_dir / path).as_posix())
+            except Exception as err:
+                LOGGER.debug("Exception %s makes me consider remote ftp path %s as a file", utils.err_str(err), self.base_dir / path)
+                return True
+            finally:
+                self.ftp.cwd(current)
+            LOGGER.debug("Could use CWD on '%s', it is not a file", self.base_dir / path)
+            return False
+            
 
-    def is_dir(self, path: common.PathLike):
+    def _is_dir(self, path: common.PathLike):
         """
         Tests if a path is a directory. Returns false if the path doesn't exist
 
@@ -139,14 +181,34 @@ class FTPFileSystem(common.FileSystem):
         Returns
             True if the relative path exists and is a directory, false otherwise
         """
-        try:
-            return "type=dir" in self.ftp.sendcmd(
-                "MLST %s" % (self.base_dir / path).as_posix()
-            )
-        except ftplib.error_perm as err:
-            if "cannot be listed" in err.args[0]:
+        path = PurePath(path)
+        if self._mlsd_support:
+            try:
+                return "type=dir" in self.ftp.sendcmd(
+                    "MLST %s" % path.as_posix()
+                )
+            except ftplib.error_perm as err:
+                if "cannot be listed" in err.args[0]:
+                    return False
+                raise
+        else:
+            LOGGER.debug("No MLSD support mode: trying to find if '%s' is a directory", path)
+            if not self._exists(path):
+                LOGGER.debug("'%s' doesn't exists", path)
                 return False
-            raise
+            current = self.ftp.pwd()
+            try:
+                self.ftp.cwd(path.as_posix())
+            except Exception as err:
+                LOGGER.debug("Exception %s makes me consider remote ftp path '%s' as not a dir", utils.err_str(err), path)
+                return False
+            finally:
+                self.ftp.cwd(current)
+            LOGGER.debug("Could use CWD on '%s', it is a directory", path)
+            return True
+    
+    def is_dir(self, path: common.PathLike):
+        return self._is_dir(self.base_dir / path)
 
     def unlink(self, path: common.PathLike):
         """
@@ -183,7 +245,7 @@ class FTPFileSystem(common.FileSystem):
                 raise FTPPermissionError(err=err, err_str=utils.err_str(err))
 
     def move_file(
-        self, path: common.PathLike, dest: common.PathLike, force: bool = False
+        self, src: common.PathLike, dest: common.PathLike, force: bool = False
     ):
         """
         Moves a file
@@ -193,17 +255,33 @@ class FTPFileSystem(common.FileSystem):
             dest -- new name
             force -- overwrite destination if it already exists
         """
-        posix_path = (self.base_dir / path).as_posix()
+        posix_path = (self.base_dir / src).as_posix()
         posix_dest = (self.base_dir / dest).as_posix()
         if self.exists(dest):
             if force:
                 self.unlink(dest)
             else:
                 FileExistsError("%s exists, cannot move to that destination" % dest)
-        if self.exists(path):
+        if self.exists(src):
             self.ftp.rename(posix_path, posix_dest)
         else:
-            raise FileNotFoundError("%s doesn't exist, cannot move it" % path)
+            raise FileNotFoundError("%s doesn't exist, cannot move it" % src)
+    
+    def make_parent(self, path: common.PathLike):
+        """
+        Creates all the missing parents of a path
+        """
+        fullpath = self.base_dir / path
+        LOGGER.debug("Creating parents for %s", fullpath)
+        i = -1
+        for i, parent in enumerate(fullpath.parents):
+            if self._is_dir(parent):
+                break
+        if i > -1:
+            LOGGER.debug("To create: %s", list(fullpath.parents)[:i])
+            for parent in reversed(list(fullpath.parents)[:i]):
+                LOGGER.debug("Creating %s", parent)
+                self.ftp.mkd(parent.as_posix())
 
     def download(self, url: str, dest: common.PathLike, force: bool = False):
         """
@@ -221,7 +299,8 @@ class FTPFileSystem(common.FileSystem):
                 raise FileExistsError(
                     "%s exists, cannot doawnload in that destination" % dest
                 )
-        with tempfile.TemporaryFile(dir=self.tempdir) as tmp:
+        self.make_parent(dest)
+        with tempfile.TemporaryFile(dir=self.tempdirpath) as tmp:
             tmp.write(requests.get(url).content)
             tmp.seek(0)
             self.ftp.storbinary(
@@ -242,6 +321,7 @@ class FTPFileSystem(common.FileSystem):
                 self.unlink(dest)
             else:
                 raise FileExistsError("%s exists, cannot send data into it" % dest)
+        self.make_parent(dest)
         self.ftp.storbinary(cmd="STOR %s" % (self.base_dir / dest).as_posix(), fp=fp)
 
     def send_file(
@@ -260,6 +340,7 @@ class FTPFileSystem(common.FileSystem):
                 self.unlink(dest)
             else:
                 raise FileExistsError("%s exists, cannot send file into it" % dest)
+        self.make_parent(dest)
         with open(src, mode="rb") as f:
             self.ftp.storbinary(cmd="STOR %s" % (self.base_dir / dest).as_posix(), fp=f)
 
@@ -293,7 +374,7 @@ class FTPFileSystem(common.FileSystem):
                 with open(elem, mode="rb") as f:
                     self.ftp.storbinary(cmd="STOR %s" % dst.as_posix(), fp=f)
 
-    def open(self, path: common.PathLike, mode: str):
+    def open(self, path: common.PathLike, mode: utils.OpenMode="rt"):
         """
         Open a file on the filesystem
 
@@ -317,11 +398,12 @@ class FTPFileSystem(common.FileSystem):
             download = False
         else:
             raise ValueError("Unhandled FileMode value %s" % mode.file)
-        tmp = tempfile.TemporaryFile(dir=self.tempdir)
+        filepath = self.tempdirpath / path
         if download:
-            self.ftp.retrbinary(
-                cmd="RETR %s" % (self.base_dir / path).as_posix(),
-                callback=lambda data: tmp.write(data),
-            )
-            tmp.seek(0)
-        return common.RemoteFileObject(fs=self, remote_path=path, mode=mode, tmp=tmp)
+            filepath.parent.mkdir(exist_ok=True, parents=True)
+            with filepath.open("wb") as f:
+                self.ftp.retrbinary(
+                    cmd="RETR %s" % (self.base_dir / path).as_posix(),
+                    callback=lambda data: f.write(data),
+                )
+        return common.RemoteFileObject(fs=self, remote_path=path, mode=mode, filepath=filepath)

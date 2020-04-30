@@ -5,6 +5,7 @@ Part of the Minecraft Pack Manager utility (mpm)
 """
 # Standard library import
 from abc import ABC, abstractmethod
+import enum
 import logging
 from pathlib import Path
 import requests
@@ -24,8 +25,9 @@ from ..manager import common
 
 PathLike = Union[str, Path]
 
-LOGGER = logging.getLogger("mpm.manager.update")
 
+
+LOGGER = logging.getLogger("mpm.manager.update")
 
 class UpdateProvider(ABC):
     """
@@ -78,17 +80,18 @@ class LocalUpdateProvider(UpdateProvider):
 
     def __enter__(self):
         self.temp_dir = tempfile.TemporaryDirectory(dir=".")
-        self.root = Path(self.temp_dir)
+        self.root = Path(self.temp_dir.__enter__())
         with zipfile.ZipFile(self.zip_path) as zf:
-            zf.extractall(self.temp_dir)
+            zf.extractall(self.root)
         manifest_path = self.root / "pack-manifest.json"
         if not manifest_path.is_file():
             raise ValueError("The update zip does not contain a manifets")
         self.manifest = manifest.pack.read(manifest_path)
+        self.mod_map = {mod["addonID"]: mod for mod in self.manifest["mods"]}
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.temp_dir.cleanup()
+        self.temp_dir.__exit__(exc_type, exc_value, traceback)
 
     def get_manifest(self):
         if self.manifest is None:
@@ -98,7 +101,10 @@ class LocalUpdateProvider(UpdateProvider):
     def install_mod(self, fs: filesystem.common.FileSystem, addonID: str):
         if self.manifest is None:
             raise RuntimeError("UpdateProvider object must be used in a with statement")
-        mod = self.manifest["mods"][addonID]
+        mod = self.mod_map.get(addonID, None)
+        if mod is None:
+            LOGGER.error("Tryied to install invalid mod with id %s, skipping", addonID)
+            return
         LOGGER.info("Downloading mod %s", mod.get("name", addonID))
         fs.download(
             network.TwitchAPI.get_download_url(addonID, mod["fileID"]),
@@ -109,7 +115,7 @@ class LocalUpdateProvider(UpdateProvider):
         if self.manifest is None:
             raise RuntimeError("UpdateProvider object must be used in a with statement")
         LOGGER.info("Copying override %s", override)
-        fs.send_file(self.root / "overrides" / override, "overrides/" + override)
+        fs.send_file(self.root / "overrides" / override, override)
 
 
 class HTTPUpdateProvider(UpdateProvider):
@@ -133,6 +139,7 @@ class HTTPUpdateProvider(UpdateProvider):
         except Exception as err:
             LOGGER.debug("Exception: %s", utils.err_str(err))
             raise ValueError("URL is invalid, it doesn't have a pack-manifest.json")
+        self.mod_map = {mod["addonID"]: mod for mod in self.manifest["mods"]}
 
     def __enter__(self):
         return self
@@ -144,7 +151,10 @@ class HTTPUpdateProvider(UpdateProvider):
         return self.manifest
 
     def install_mod(self, fs: filesystem.common.FileSystem, addonID: str):
-        mod = self.manifest["mods"][addonID]
+        mod = self.mod_map.get(addonID, None)
+        if mod is None:
+            LOGGER.error("Tryied to install invalid mod with id %s, skipping", addonID)
+            return
         LOGGER.info("Downloading mod %s", mod.get("name", addonID))
         fs.download(
             network.TwitchAPI.get_download_url(addonID, mod["fileID"]),
@@ -157,6 +167,61 @@ class HTTPUpdateProvider(UpdateProvider):
             self.url._replace(path=str(self.path / "overrides" / override)).geturl(),
             override,
         )
+
+class UpdateType(enum.Enum):
+    LOCAL = (("local",), LocalUpdateProvider)
+    HTTP = (("http",), HTTPUpdateProvider)
+
+    def __new__(cls, aliases, function=None):
+        obj = object.__new__(cls)
+        obj._value_ = aliases[0]
+        obj.aliases = aliases
+        obj.function = function
+        return obj
+
+    def __call__(self, *args, **kwargs):
+        return self.function(*args, **kwargs)
+
+    @classmethod
+    def _missing_(cls, value):
+        string = str(value).lower()
+        for member in cls:
+            if string in member.aliases:
+                return member
+
+class InstallType(enum.Enum):
+    LOCAL = (("local",), filesystem.LocalFileSystem)
+    FTP = (("ftp",), filesystem.FTPFileSystem.from_url)
+
+    def __new__(cls, aliases, function=None):
+        obj = object.__new__(cls)
+        obj._value_ = aliases[0]
+        obj.aliases = aliases
+        obj.function = function
+        return obj
+
+    def __call__(self, *args, **kwargs):
+        return self.function(*args, **kwargs)
+
+    @classmethod
+    def _missing_(cls, value):
+        string = str(value).lower()
+        for member in cls:
+            if string in member.aliases:
+                return member
+
+
+def update(
+    source,
+    install,
+    source_type: UpdateType,
+    install_type: InstallType,
+    packmodes
+):
+    UpdateProviderConstructor = UpdateType(source_type)
+    FileSystemConstructor = InstallType(install_type)
+    with FileSystemConstructor(install) as fs, UpdateProviderConstructor(source) as provider:
+        return update_pack(provider, fs, packmodes)
 
 
 def update_pack(
@@ -176,10 +241,10 @@ def update_pack(
     LOGGER.info("Reading pack manifest")
     if fs.exists("pack-manifest.json"):
         with fs.open("pack-manifest.json") as f:
-            local_manifest = manifest.pack.read(f)
-        LOGGER.info("Local version is %s", local_manifest["pack-version"])
+            local_manifest = manifest.pack.load(f)
         LOGGER.info(
-            "Current packmodes are: %s",
+            "Local version is %s with packmodes: %s",
+            local_manifest["pack-version"],
             ", ".join(local_manifest.get("current-packmodes", ["No packmodes found"])),
         )
     else:
@@ -194,13 +259,12 @@ def update_pack(
     remote_manifest = update.get_manifest()
     # Verify packmodes
     if not packmodes:
-        LOGGER.info("No packmodes provided for update")
         if "current-packmodes" in local_manifest:
             packmodes = local_manifest["current-packmodes"]
-            LOGGER.info("Using previous packmodes: %s", ", ".join(packmodes))
+            LOGGER.info("No packmodes provided for update, using previous packmodes: %s", ", ".join(packmodes))
         else:
             packmodes = list(remote_manifest["packmodes"].keys())
-            LOGGER.info("No previous packmodes, defaulting to all packmodes")
+            LOGGER.info("No packmodes provided for update, no previous packmodes, defaulting to all packmodes")
     # Compute states
     local_packmodes = manifest.pack.get_all_dependencies(
         local_manifest["packmodes"], local_manifest.get("current-packmodes", [])
@@ -210,20 +274,20 @@ def update_pack(
     )
     # Quick comparison
     if (
-        remote_manifest["pack-version"] == local_manifest["pack_version"]
+        remote_manifest["pack-version"] == local_manifest["pack-version"]
         and local_packmodes == new_packmodes
     ):
         LOGGER.info("Nothing to update !")
         return
     else:
         LOGGER.info(
-            "Updating to version %s with packmodes %s (includes dependencies)",
+            "Updating to version %s with packmodes: %s (includes dependencies)",
             remote_manifest["pack-version"],
             ", ".join(packmode for packmode in sorted(new_packmodes)),
         )
     # Update mods
     LOGGER.info("Updating mods")
-    LOGGER.info("Computing mod difference")
+    LOGGER.info("Comparing old and new states")
     mod_diff = common.compute_mod_diff(
         manifest.pack.get_selected_mods(local_manifest, local_packmodes),
         manifest.pack.get_selected_mods(remote_manifest, new_packmodes),
@@ -231,12 +295,13 @@ def update_pack(
     )
     LOGGER.info("Applying mod difference")
     mod_dir = Path("mods")
+    local_mod_map = {mod["addonID"]:mod for mod in local_manifest["mods"]}
     for addonID in mod_diff.deleted:
-        mod = local_manifest["mods"][addonID]
+        mod = local_mod_map[addonID]
         LOGGER.info("Deleting mod %s", mod["name"])
         fs.unlink(mod_dir / mod["filename"])
     for addonID in mod_diff.updated:
-        mod = local_manifest["mods"][addonID]
+        mod = local_mod_map[addonID]
         LOGGER.info("Deleting mod %s", mod["name"])
         fs.unlink(mod_dir / mod["filename"])
         update.install_mod(filesystem, addonID)
@@ -245,7 +310,7 @@ def update_pack(
 
     # Update overrides
     LOGGER.info("Updating overrides")
-    LOGGER.info("Computing override difference")
+    LOGGER.info("Comparing old and new states")
     override_diff = common.compute_override_diff(
         manifest.pack.get_selected_overrides(local_manifest, local_packmodes),
         manifest.pack.get_selected_overrides(remote_manifest, new_packmodes),
@@ -264,82 +329,10 @@ def update_pack(
     for override in override_diff.added:
         update.install_override(fs, override)
     # Write new manifest to save current state
-    new_manifest = manifest.pack.make(
-        pack_version=remote_manifest["pack-version"],
-        packmodes=remote_manifest["packmodes"],
-        mods=remote_manifest["mods"],
-        overrides=remote_manifest["overrides"],
-        override_cache=remote_manifest["override-cache"],
-        current_packmodes=packmodes,
+    new_manifest = manifest.pack.copy(
+        remote_manifest,
+        current_packmodes=list(packmodes)
     )
     with fs.open("pack-manifest.json", "wt") as f:
-        manifest.pack.dump(new_manifest, f)
+        manifest.pack.dump(new_manifest, f, encode=False)
     LOGGER.info("Done !")
-
-
-def update_http(pack_path: PathLike, http_url: str, packmodes: List[str] = None):
-    """
-    Update a local pack directory from an http server
-
-    Arguments
-        pack_path -- path to the pack directory to update
-        http_url -- url to the root of the server exposing the update
-        packmodes -- optional list of packmodes to install
-    """
-    pack = Path(pack_path)
-    if not pack.is_dir():
-        raise NotADirectoryError(pack)
-    with HTTPUpdateProvider(http_url) as update, filesystem.local.LocalFileSystem(
-        pack
-    ) as fs:
-        update_pack(update, fs, packmodes)
-
-
-def update_zip(pack_path: PathLike, zip_path: PathLike, packmodes: List[str] = None):
-    """
-    Updates a local pack directory from a local zip mpm release
-
-    Arguments
-        pack_path -- path to the pack directory to update
-        zip_path -- path to the local zip mpm release
-        packmodes -- optional list of packmodes to install
-    """
-    pack = Path(pack_path)
-    if not pack.is_dir():
-        raise NotADirectoryError(pack)
-    with LocalUpdateProvider(zip_path) as update, filesystem.LocalFileSystem(
-        pack
-    ) as fs:
-        update_pack(update, fs, packmodes)
-
-
-def update_remote_http(ftp_url: str, http_url: str, packmodes: List[str] = ("server")):
-    """
-    Updates a remote pack (over ftp) from an http server
-
-    Arguments
-        ftp_url -- url to the remote ftp filesystem
-        http_url -- url to the root of the server exposing the update
-        packmodes -- optional list of packmodes to install
-    """
-    with HTTPUpdateProvider(http_url) as update, filesystem.FTPFileSystem.from_url(
-        ftp_url
-    ) as fs:
-        update_pack(update, fs, packmodes)
-
-
-def update_remote_zip(
-    ftp_url: str, zip_path: PathLike, packmodes: List[str] = ("server")
-):
-    """
-    Updates a remote pack (over ftp) from a local zip mpm release
-
-    Arguments
-        ftp_url -- url to the remote ftp filesystem
-        zip_path -- path to the local zip mpm release
-        packmodes -- optional list of packmodes to install
-    """
-    with LocalUpdateProvider(zip_path) as update, filesystem.FTPFileSystem.from_url(
-        ftp_url
-    ) as fs:
-        update_pack(update, fs, packmodes)

@@ -30,13 +30,6 @@ class LocalFileSystem(common.FileSystem):
         super().__init__(base_dir)
         self.base_dir = Path(base_dir)
 
-    def close(self):
-        """
-        Clean up resources
-        """
-        # Nothing to do
-        pass
-
     def exists(self, path: common.PathLike):
         """
         Determines if the path points to something
@@ -200,7 +193,7 @@ class LocalFileSystem(common.FileSystem):
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(src=src, dst=dest)
 
-    def open(self, path: common.PathLike, mode="t"):
+    def open(self, path: common.PathLike, mode="rt"):
         """
         Open a file on the filesystem
 
@@ -208,4 +201,4 @@ class LocalFileSystem(common.FileSystem):
             path -- path to open relative to base_dir
             mode -- open mode. See built-ins open()
         """
-        return open(self.base_dir / Path(path), mode)
+        return open(self.base_dir / Path(path), mode=mode)

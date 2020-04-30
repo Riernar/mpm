@@ -60,13 +60,6 @@ class FileSystem(ABC):
         """
         Context manager implementation
         """
-        self.close()
-
-    @abstractmethod
-    def close(self):
-        """
-        Clean up resources
-        """
 
     @abstractmethod
     def exists(self, path: PathLike):
@@ -198,34 +191,27 @@ class RemoteFileObject:
         fs: FileSystem,
         remote_path: PathLike,
         mode: utils.OpenMode,
-        tmp: tempfile.TemporaryFile,
+        filepath: PathLike,
     ):
         self.fs = fs
-        self.tmp = tmp
+        self.filepath = filepath
         self.mode = utils.OpenMode
         self.remote_path = remote_path
 
         self.file_handler = open(
-            self.tmp.name, mode=mode.file + mode.data + ("+" if mode.update else "")
+            self.filepath, mode=mode.file._value_ + mode.data._value_ + ("+" if mode.update else "")
         )
 
     def __enter__(self):
-        self.tmp.__enter__()
         return self.file_handler
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.file_handler.close()
-        self.tmp.flush()
-        self.tmp.seek(0)
-        self.fs.send_data(self.tmp, self.remote_path, force=True)
-        self.tmp.__exit__(exc_type, exc_value, traceback)
+        self.fs.send_file(self.filepath, self.remote_path, force=True)
 
     def close(self):
         self.file_handler.close()
-        self.tmp.flush()
-        self.tmp.seek(0)
-        self.fs.send_data(self.tmp, self.remote_path, force=True)
-        self.tmp.close()
+        self.fs.send_file(self.filepath, self.remote_path, force=True)
 
     def __iter__(self):
         return iter(self.file_handler)

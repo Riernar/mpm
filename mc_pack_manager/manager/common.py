@@ -272,7 +272,7 @@ def apply_override_diff(target_dir: PathLike, source_dir: PathLike, diff: DiffOb
     for path in sorted(diff.updated):
         trg_file = target_dir / path
         src_file = source_dir / path
-        trg_file.mkdir(parents=True, exists_ok=True)
+        trg_file.parent.mkdir(parents=True, exist_ok=True)
         try:
             shutil.copyfile(src_file, trg_file)
             LOGGER.debug("Updated %s from %s", trg_file, src_file)

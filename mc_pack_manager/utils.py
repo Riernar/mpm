@@ -10,6 +10,7 @@ import enum
 from functools import wraps
 import hashlib
 import inspect
+import json
 import logging
 from pathlib import Path
 from traceback import format_exception_only, format_tb
@@ -28,24 +29,40 @@ class FileMode(enum.Enum):
     CREATE = "x"
     APPEND = "a"
 
+    @classmethod
+    def has(cls, value):
+        try:
+            cls(value)
+            return True
+        except ValueError:
+            return False
+
 
 class DataMode(enum.Enum):
     BYTES = "b"
     TEXT = "t"
 
+    @classmethod
+    def has(cls, value):
+        try:
+            cls(value)
+            return True
+        except ValueError:
+            return False
 
-OpenMode = namedtuple("FileMode", ["file", "data", "update"])
+
+OpenMode = namedtuple("OpenMode", ["file", "data", "update"])
 
 
 def parse_filemode(mode: str) -> OpenMode:
-    file_t = [char for char in mode if char in FileMode]
+    file_t = [char for char in mode if FileMode.has(char)]
     if len(file_t) > 1:
         raise ValueError("Multiple values for open mode")
-    text_t = [char for char in mode if char in DataMode]
+    text_t = [char for char in mode if DataMode.has(char)]
     if len(text_t) > 1:
         raise ValueError("Multiple values for text mode")
-    return FileMode(
-        file=OpenMode(file_t[0]) if file_t else FileMode.READ,
+    return OpenMode(
+        file=FileMode(file_t[0]) if file_t else FileMode.READ,
         data=DataMode(text_t[0]) if text_t else DataMode.TEXT,
         update="+" in mode,
     )
@@ -112,7 +129,19 @@ class Version:
             num + (len(self._data) - pos - 1 == version_incr)
             for pos, num in enumerate(self._data)
         )
+    
+    def to_json(self):
+        return str(self)
 
+    @classmethod
+    def from_json(json_str):
+        return Version(json_str)
+
+class SerializableClassJSONEncoder(json.JSONEncoder):
+    def default(self, obj):  # pylint: disable=E0202
+        if hasattr(obj, "to_json"):
+            return obj.to_json()
+        return super().default(obj)
 
 class AutoFormatError(Exception):
     """

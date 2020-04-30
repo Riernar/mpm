@@ -19,10 +19,11 @@ MPM_FILE = Path(inspect.getfile(inspect.currentframe())).absolute()
 LOGGER = logging.getLogger("mpm")
 
 FILE_FORMAT = "[{asctime}][{name: <20}][{funcName}()][{levelname}] {message}"
-CONSOLE_FORMAT = "[{name: <20}][{levelname}] {message}"
+CONSOLE_FORMAT = "[{levelname}] {message}"
+CONSOLE_FORMAT_DEBUG = "[{name: <20}][{levelname}] {message}"
 
 
-def configure_logging(log_file: Path = "mc-pack-manager.log"):
+def configure_logging(debug=False, log_file: Path = "mc-pack-manager.log"):
     # module logger
     logger = logging.getLogger("mpm")
     logger.setLevel(logging.DEBUG)
@@ -37,9 +38,9 @@ def configure_logging(log_file: Path = "mc-pack-manager.log"):
     # Console logging
     ## Handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG if debug else logging.INFO)
     ## Formatter
-    console_formatter = logging.Formatter(CONSOLE_FORMAT, style="{")
+    console_formatter = logging.Formatter(CONSOLE_FORMAT_DEBUG if debug else CONSOLE_FORMAT, style="{")
     console_handler.setFormatter(console_formatter)
     # Attach to module logger
     logger.addHandler(file_handler)
@@ -47,73 +48,67 @@ def configure_logging(log_file: Path = "mc-pack-manager.log"):
 
 
 if __name__ == "__main__":
-    configure_logging()
     parser = argparse.ArgumentParser(
         description="Minecraft Pack Manager -- Helps manage minecraft modpacks"
     )
+    parser.add_argument(
+        "-d", "--debug",
+        help="Activate debug mode on the console",
+        action="store_true"
+    )
     subparsers = parser.add_subparsers(
-        dest="command", required=True, help="Available subcommands:"
+        required=True, help="Available subcommands:"
     )
 
     # Snapshot subcommand
     snapshot_parser = subparsers.add_parser(
         "snapshot",
-        help="Creates a snapshot, an enriched representation of a modpack, from a curse-generated zip",
+        help="Creates a snapshot from a curse-generated zip. Snapshots are an improved version of curse's modpack zip",
     )
     snapshot_parser.description = (
-        "Creates or updates a snapshot of the curse pack into pack_dir"
+        "Creates or updates a snapshot zip from the provided curse modpack zip"
     )
+    snapshot_parser.set_defaults(command=mpm.manager.snapshot.snapshot)
     snapshot_parser.add_argument(
         "curse_zip",
         type=Path,
         help="path to the zip file exported by the curse/twitch app",
     )
     snapshot_parser.add_argument(
-        "pack_dir",
+        "snapshot",
         type=Path,
-        help="Local dir in which to build or update the modpack representation",
+        help="path to the snapshot file to create or update",
+    )
+    snapshot_parser.add_argument(
+        "-v", "--version-incr",
+        choices=("MINOR", "MEDIUM", "MAJOR"),
+        default="MINOR",
+        help="Version number of the snapshot to increase. Defaults to MINOR"
+
     )
 
     # Release subcommands
     release_parser = subparsers.add_parser(
         "release",
-        help="make various zip, used for releasing the pack, from snapshots (see 'mpm snapshot')",
+        help="Creates a curse modpack zip or server files from a MPM snapshot",
     )
-    release_parser.description = "Creates zip file for various release format"
+    release_parser.description = "Creates a curse modpack zip or server files from a MPM snapshot"
     release_subparser = release_parser.add_subparsers(
-        dest="release_type", required=True, help="Specific release type"
-    )
-    ## MPM Release subcommand
-    mpm_release_parser = release_subparser.add_parser(
-        "mpm", help="Release containing the full snapshot. Used for updating with MPM"
-    )
-    mpm_release_parser.description = "Creates a release zip compatible with MPM, used for updating with MPM (see 'mpm update')"
-    mpm_release_parser.add_argument(
-        "pack_dir",
-        type=Path,
-        help="Snapshot directory where the snapshot was generated using 'mpm snapshot'",
-    )
-    mpm_release_parser.add_argument(
-        "output_zip", type=Path, help="Path to the zip file to create"
-    )
-    mpm_release_parser.add_argument(
-        "-f",
-        "--force",
-        action="store_true",
-        help="overwrite the output zip if it already exists",
+        required=True, help="Release type"
     )
     ## Curse release
     curse_release_parser = release_subparser.add_parser(
         "curse",
-        help="Release compatible with curse. Used to a set of packmodes as a standard curse modpack",
+        help="Makes a curse modpack zip. Used to release a pack version for Curse or MultiMC",
     )
     curse_release_parser.description = (
-        "Creates a release .zip compatible with curse and the twitch app"
+        "Creates a release .zip of the modpack compatible with curse, the twitch app and MultiMC. Allows to select packmodes to release"
     )
+    curse_release_parser.set_defaults(command=mpm.manager.release.curse)
     curse_release_parser.add_argument(
-        "pack_dir",
+        "snapshot",
         type=Path,
-        help="Snapshot directory were the snapshot was generated using 'mpm snapshot'",
+        help="Path to the snapshot file generated by 'mpm snapshot'",
     )
     curse_release_parser.add_argument(
         "output_zip", type=Path, help="Path to the zip file to create"
@@ -127,24 +122,25 @@ if __name__ == "__main__":
     curse_release_parser.add_argument(
         "--include-mpm",
         action="store_true",
-        help="Bundle MPM into the release, ready to use fo auto-updates",
+        help="Bundle MPM into the release, ready to use for auto-updates",
     )
     curse_release_parser.add_argument(
         "packmodes",
         metavar="packmode",
         nargs="*",
-        help="Packmodes to export to the release. MPM will only include mods and overrides belonging to those packmodes or packmodes they depend on. Defaults to all packmodes",
+        help="Packmodes to export to the release. MPM will only include mods and overrides belonging to those packmodes or their dependencies. Defaults to all packmodes",
         default=[],
     )
     ## Server release
     server_release_parser = release_subparser.add_parser(
-        "serverfiles", help="Release ready for a server with mods jars and overrides"
+        "serverfiles", help="Creates server files, with mod jars and overrides. Doesn't include minecraft or minecraftforge"
     )
-    server_release_parser.description = "Release containing all files necessary to run the selected packmodes. Contains mod JAR file ! Be mindfule of mod licences before ditributing the release ! WARNING: this does *not* contains forge or minecraft"
+    server_release_parser.description = "Creates the server files for the selected packmodes, with mods' jar and overrides. Be mindfule of mods' licence before ditributing this. WARNING: this does *not* contains minecraft or minecraftforge"
+    server_release_parser.set_defaults(command=mpm.manager.release.serverfiles)
     server_release_parser.add_argument(
-        "pack_dir",
+        "snapshot",
         type=Path,
-        help="Snapshot directory were the snapshot was generated using 'mpm snapshot'",
+        help="Path to the snapshot file generated with 'mpm snapshot'",
     )
     server_release_parser.add_argument(
         "output_zip", type=Path, help="Path to the zip file to create"
@@ -158,101 +154,69 @@ if __name__ == "__main__":
     server_release_parser.add_argument(
         "--include-mpm",
         action="store_true",
-        help="Bundle MPM into the release, ready to use fo auto-updates",
+        help="Bundle MPM into the release, ready tor use fo auto-updates",
     )
     server_release_parser.add_argument(
         "packmodes",
         metavar="packmode",
         nargs="*",
-        help="Packmodes to export to the release. MPM will only include mods and overrides belonging to those packmodes or packmodes they depend on. Defaults to 'server'",
+        help="Packmodes to export to the release. MPM will only include mods and overrides belonging to those packmodes or their dependencies. Defaults to 'server'",
         default=[],
     )
 
     # Update subcommand
     update_parser = subparsers.add_parser(
         "update",
-        help="updates a modpack dir from an mpm release (see 'mpm release mpm')",
+        help="Updates a modpack installation from a MPM snapshot",
     )
     update_parser.description = (
-        "Updates a pack installation to a different version and/or set of packmodes"
+        "Updates a modpack installation to a different version and/or set of packmodes"
     )
-    install_group = update_parser.add_mutually_exclusive_group(required=True)
-    install_group.add_argument(
-        "--pack-local",
-        type=Path,
-        metavar="PATH",
-        help="Path to the local installation directory to update (./minecraft dir)",
+    update_parser.set_defaults(command=mpm.manager.update.update)
+    update_parser.epilog = "NOTE: Changing packmodes without changing versions is fully supported"
+    update_parser.add_argument(
+        "source",
+        help="Update source, by default a path. See also --update"
     )
-    install_group.add_argument(
-        "--pack-ftp",
-        metavar="URL",
-        help="FTP url to a remote installation to update, pointing to the remote ./minecraft directory",
+    update_parser.add_argument(
+        "install",
+        help="Installation path or url, by default a path. See also --pack"
     )
-    update_group = update_parser.add_mutually_exclusive_group(required=True)
-    update_group.add_argument(
-        "--update-zip",
-        metavar="PATH",
-        type=Path,
-        help="Path to a local .zip generated by 'mpm release mpm'",
+    update_parser.add_argument(
+        "-u", "--update",
+        choices=("local", "http"),
+        default="local",
+        dest="source_type",
+        help="Specifies the type of the update source. Defaults to 'local'. LOCAL: path to a local MPM snapshot file. HTTP: url to a http(s) server exposing the content of the MPM snapshot"
     )
-    update_group.add_argument(
-        "--update-http",
-        metavar="URL",
-        help="HTTP(S) url to a server exposing the content of an mpm release generated by 'mpm release mpm' (e.g. github repo, webserver ...)",
+    update_parser.add_argument(
+        "-i", "--install",
+        choices=("local", "ftp"),
+        default="local",
+        dest="install_type",
+        help="Specifies the type of the pack installation. Defaults to 'local'. LOCAL: ath to a local modpack directory. FTP: ftp url to a remote modpack installtion, e.g. a hosted minecraft server"
+    )
+    update_parser.add_argument(
+        "packmodes",
+        metavar="packmode",
+        nargs="*",
+        help="Packmodes to update to. MPM will only install mods and overrides belonging to those packmodes and their dependencies, and remove others mods and overrides it knows of",
+        default=[],
     )
 
     # Argument parsing
     args = parser.parse_args()
+    kwargs = vars(args)
+    if "include_mpm" in kwargs:
+        kwargs["mpm_filepath"] = MPM_FILE if kwargs.pop("include_mpm") else None
+
+    # Logging configuration
+    configure_logging(kwargs.pop("debug", False))
 
     # Command selection
     try:
-        if args.command == "snapshot":
-            mpm.manager.snapshot.snapshot(
-                pack_dir=args.pack_dir, curse_zip=args.curse_zip
-            )
-        elif args.command == "release":
-            if args.release_type == "mpm":
-                mpm.manager.release.mpm(
-                    pack_dir=args.pack_dir,
-                    output_file=args.output_zip,
-                    force=args.force,
-                )
-            elif args.release_type == "curse":
-                mpm.manager.release.curse(
-                    pack_dir=args.pack_dir,
-                    output_zip=args.output_zip,
-                    packmodes=args.packmodes,
-                    force=args.force,
-                    mpm_filepath=MPM_FILE if args.include_mpm else None,
-                )
-            elif args.release_type == "serverfiles":
-                mpm.manager.release.serverfiles(
-                    pack_dir=args.pack_dir,
-                    output_zip=args.output_zip,
-                    packmodes=args.packmodes,
-                    force=args.force,
-                    mpm_filepath=MPM_FILE if args.include_mpm else None,
-                )
-        elif args.command == "update":
-            if "pack_local" in args:
-                if "update_zip" in args:
-                    mpm.manager.update.update_zip(
-                        pack_path=args.pack_local, zip_path=args.update_zip
-                    )
-                elif "update_http" in args:
-                    mpm.manager.update.update_http(
-                        pack_path=args.pack_local, http_url=args.update_http
-                    )
-            elif "install_ftp" in args:
-                if "update_zip" in args:
-                    mpm.manager.update.update_remote_zip(
-                        ftp_url=args.install_ftp, zip_path=args.update_zip
-                    )
-                elif "update_http" in args:
-                    mpm.manager.update.update_remote_http(
-                        ftp_url=args.install_ftp, http_url=args.update_http
-                    )
-
+        command = kwargs.pop("command")
+        command(**kwargs)
     except Exception as err:
         LOGGER.error(
             "Minecraft Pack Manager encountered an exception:\n\n%s",
@@ -262,8 +226,7 @@ if __name__ == "__main__":
             "Detailed statcktrace:\n%s", "".join(traceback.format_tb(err.__traceback__))
         )
         print(
-            "An exception occured, see above. The full stacktrace is available in the log file"
-            "Exceptions are not yet handled in MPM, so this might be because of a wrong argument.\n"
-            "If this is a problem in MPM, please fill in an issue at https://github.com/Riernar/mpm/issues"
-            "and provide the log file"
+            "An exception occured, see above. The full stacktrace is available in the log file."
+            " Exceptions are not yet handled in MPM, so this might be because of a wrong argument.\n"
+            "If this is a problem in MPM, please fill in an issue at\nhttps://github.com/Riernar/mpm/issues\nand provide the log file"
         )

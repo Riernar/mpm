@@ -5,6 +5,7 @@ Part of the Minecraft Pack Manager utility (mpm)
 """
 # Standard library import
 from copy import deepcopy
+import tkinter as tk
 import tkinter.messagebox as mbox
 import logging
 
@@ -61,13 +62,18 @@ def confirm_install() -> bool:
     Confirms that update should be performed on an empty install
     """
     message = (
-        "The pack you are trying to update doesn't have a pack-manifest.json file"
-        "Unless you are doing a first install, *THIS SHOULD NOT HAPPEN*. If you are doing a first install, just click 'OK'\n"
+        "The pack you are trying to update doesn't have a pack-manifest.json file. "
+        "Unless you are doing a first install, *THIS SHOULD NOT HAPPEN*. If you are doing a first install, just click 'OK'\n\n"
         "Your pack is currently broken from MPM point of view, but should still run."
-        "If you proceed, the udpate process will duplicate mods and add conflicting overrides:"
-        "this *WILL BREAK* your pack for minecraft too. It is advised to cancel"
+        "\nIf you proceed, the udpate process will duplicate mods and add conflicting overrides:"
+        " this *WILL BREAK* your pack for minecraft too. It is advised to cancel"
     )
-    return mbox.askokcancel(
-        title="Confirm Update",
-        message=message
-    )
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        return mbox.askokcancel(
+            title="Confirm Update",
+            message=message
+        )
+    finally:
+        root.destroy()
