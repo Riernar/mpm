@@ -199,7 +199,8 @@ class RemoteFileObject:
         self.remote_path = remote_path
 
         self.file_handler = open(
-            self.filepath, mode=mode.file._value_ + mode.data._value_ + ("+" if mode.update else "")
+            self.filepath,
+            mode=mode.file._value_ + mode.data._value_ + ("+" if mode.update else ""),
         )
 
     def __enter__(self):

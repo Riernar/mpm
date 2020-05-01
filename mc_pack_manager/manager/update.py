@@ -26,8 +26,8 @@ from ..manager import common
 PathLike = Union[str, Path]
 
 
-
 LOGGER = logging.getLogger("mpm.manager.update")
+
 
 class UpdateProvider(ABC):
     """
@@ -168,6 +168,7 @@ class HTTPUpdateProvider(UpdateProvider):
             override,
         )
 
+
 class UpdateType(enum.Enum):
     LOCAL = (("local",), LocalUpdateProvider)
     HTTP = (("http",), HTTPUpdateProvider)
@@ -188,6 +189,7 @@ class UpdateType(enum.Enum):
         for member in cls:
             if string in member.aliases:
                 return member
+
 
 class InstallType(enum.Enum):
     LOCAL = (("local",), filesystem.LocalFileSystem)
@@ -212,15 +214,13 @@ class InstallType(enum.Enum):
 
 
 def update(
-    source,
-    install,
-    source_type: UpdateType,
-    install_type: InstallType,
-    packmodes
+    source, install, source_type: UpdateType, install_type: InstallType, packmodes
 ):
     UpdateProviderConstructor = UpdateType(source_type)
     FileSystemConstructor = InstallType(install_type)
-    with FileSystemConstructor(install) as fs, UpdateProviderConstructor(source) as provider:
+    with FileSystemConstructor(install) as fs, UpdateProviderConstructor(
+        source
+    ) as provider:
         return update_pack(provider, fs, packmodes)
 
 
@@ -261,10 +261,15 @@ def update_pack(
     if not packmodes:
         if "current-packmodes" in local_manifest:
             packmodes = local_manifest["current-packmodes"]
-            LOGGER.info("No packmodes provided for update, using previous packmodes: %s", ", ".join(packmodes))
+            LOGGER.info(
+                "No packmodes provided for update, using previous packmodes: %s",
+                ", ".join(packmodes),
+            )
         else:
             packmodes = list(remote_manifest["packmodes"].keys())
-            LOGGER.info("No packmodes provided for update, no previous packmodes, defaulting to all packmodes")
+            LOGGER.info(
+                "No packmodes provided for update, no previous packmodes, defaulting to all packmodes"
+            )
     # Compute states
     local_packmodes = manifest.pack.get_all_dependencies(
         local_manifest["packmodes"], local_manifest.get("current-packmodes", [])
@@ -295,7 +300,7 @@ def update_pack(
     )
     LOGGER.info("Applying mod difference")
     mod_dir = Path("mods")
-    local_mod_map = {mod["addonID"]:mod for mod in local_manifest["mods"]}
+    local_mod_map = {mod["addonID"]: mod for mod in local_manifest["mods"]}
     for addonID in mod_diff.deleted:
         mod = local_mod_map[addonID]
         LOGGER.info("Deleting mod %s", mod["name"])
@@ -330,8 +335,7 @@ def update_pack(
         update.install_override(fs, override)
     # Write new manifest to save current state
     new_manifest = manifest.pack.copy(
-        remote_manifest,
-        current_packmodes=list(packmodes)
+        remote_manifest, current_packmodes=list(packmodes)
     )
     with fs.open("pack-manifest.json", "wt") as f:
         manifest.pack.dump(new_manifest, f, encode=False)

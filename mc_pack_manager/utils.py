@@ -129,7 +129,7 @@ class Version:
             num + (len(self._data) - pos - 1 == version_incr)
             for pos, num in enumerate(self._data)
         )
-    
+
     def to_json(self):
         return str(self)
 
@@ -137,11 +137,13 @@ class Version:
     def from_json(json_str):
         return Version(json_str)
 
+
 class SerializableClassJSONEncoder(json.JSONEncoder):
     def default(self, obj):  # pylint: disable=E0202
         if hasattr(obj, "to_json"):
             return obj.to_json()
         return super().default(obj)
+
 
 class AutoFormatError(Exception):
     """

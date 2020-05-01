@@ -66,7 +66,9 @@ class FTPFileSystem(common.FileSystem):
             self._mlsd_support = True
         except ftplib.error_perm:
             self._mlsd_support = False
-            LOGGER.warn("The FTP server does not support the MLSD command. Falling back to NLST, this may cause problems")
+            LOGGER.warn(
+                "The FTP server does not support the MLSD command. Falling back to NLST, this may cause problems"
+            )
         self.tempdir = tempfile.TemporaryDirectory(dir=".")
         self.tempdirpath = Path(self.tempdir.__enter__())
 
@@ -95,7 +97,6 @@ class FTPFileSystem(common.FileSystem):
         """
         self.ftp.quit()
         self.tempdir.__exit__(exc_type, exc_value, traceback)
-        
 
     def _exists(self, path: common.PathLike):
         path = PurePath(path)
@@ -113,7 +114,11 @@ class FTPFileSystem(common.FileSystem):
                 return True
             try:
                 lst = self.ftp.nlst(path.parent.as_posix())
-                LOGGER.debug("No MLSD support mode: trying NLST on parent of '%s', got %s", path, lst)
+                LOGGER.debug(
+                    "No MLSD support mode: trying NLST on parent of '%s', got %s",
+                    path,
+                    lst,
+                )
                 if str(path) in lst:
                     LOGGER.debug("'%s' exists", path)
                     return True
@@ -121,9 +126,13 @@ class FTPFileSystem(common.FileSystem):
                     LOGGER.debug("'%s' does not exists", path)
                     return False
             except Exception as err:
-                LOGGER.debug("NLST failed with %s, considering %s doesn't exists", utils.err_str(err), path)
+                LOGGER.debug(
+                    "NLST failed with %s, considering %s doesn't exists",
+                    utils.err_str(err),
+                    path,
+                )
                 return False
-    
+
     def exists(self, path: common.PathLike):
         """
         Determines if the path points to something
@@ -135,7 +144,6 @@ class FTPFileSystem(common.FileSystem):
             True if the path exists, False, otherwise
         """
         return self._exists(self.base_dir / path)
-
 
     def is_file(self, path: common.PathLike):
         """
@@ -163,13 +171,18 @@ class FTPFileSystem(common.FileSystem):
             try:
                 self.ftp.cwd((self.base_dir / path).as_posix())
             except Exception as err:
-                LOGGER.debug("Exception %s makes me consider remote ftp path %s as a file", utils.err_str(err), self.base_dir / path)
+                LOGGER.debug(
+                    "Exception %s makes me consider remote ftp path %s as a file",
+                    utils.err_str(err),
+                    self.base_dir / path,
+                )
                 return True
             finally:
                 self.ftp.cwd(current)
-            LOGGER.debug("Could use CWD on '%s', it is not a file", self.base_dir / path)
+            LOGGER.debug(
+                "Could use CWD on '%s', it is not a file", self.base_dir / path
+            )
             return False
-            
 
     def _is_dir(self, path: common.PathLike):
         """
@@ -184,15 +197,15 @@ class FTPFileSystem(common.FileSystem):
         path = PurePath(path)
         if self._mlsd_support:
             try:
-                return "type=dir" in self.ftp.sendcmd(
-                    "MLST %s" % path.as_posix()
-                )
+                return "type=dir" in self.ftp.sendcmd("MLST %s" % path.as_posix())
             except ftplib.error_perm as err:
                 if "cannot be listed" in err.args[0]:
                     return False
                 raise
         else:
-            LOGGER.debug("No MLSD support mode: trying to find if '%s' is a directory", path)
+            LOGGER.debug(
+                "No MLSD support mode: trying to find if '%s' is a directory", path
+            )
             if not self._exists(path):
                 LOGGER.debug("'%s' doesn't exists", path)
                 return False
@@ -200,13 +213,17 @@ class FTPFileSystem(common.FileSystem):
             try:
                 self.ftp.cwd(path.as_posix())
             except Exception as err:
-                LOGGER.debug("Exception %s makes me consider remote ftp path '%s' as not a dir", utils.err_str(err), path)
+                LOGGER.debug(
+                    "Exception %s makes me consider remote ftp path '%s' as not a dir",
+                    utils.err_str(err),
+                    path,
+                )
                 return False
             finally:
                 self.ftp.cwd(current)
             LOGGER.debug("Could use CWD on '%s', it is a directory", path)
             return True
-    
+
     def is_dir(self, path: common.PathLike):
         return self._is_dir(self.base_dir / path)
 
@@ -266,7 +283,7 @@ class FTPFileSystem(common.FileSystem):
             self.ftp.rename(posix_path, posix_dest)
         else:
             raise FileNotFoundError("%s doesn't exist, cannot move it" % src)
-    
+
     def make_parent(self, path: common.PathLike):
         """
         Creates all the missing parents of a path
@@ -374,7 +391,7 @@ class FTPFileSystem(common.FileSystem):
                 with open(elem, mode="rb") as f:
                     self.ftp.storbinary(cmd="STOR %s" % dst.as_posix(), fp=f)
 
-    def open(self, path: common.PathLike, mode: utils.OpenMode="rt"):
+    def open(self, path: common.PathLike, mode: utils.OpenMode = "rt"):
         """
         Open a file on the filesystem
 
@@ -406,4 +423,6 @@ class FTPFileSystem(common.FileSystem):
                     cmd="RETR %s" % (self.base_dir / path).as_posix(),
                     callback=lambda data: f.write(data),
                 )
-        return common.RemoteFileObject(fs=self, remote_path=path, mode=mode, filepath=filepath)
+        return common.RemoteFileObject(
+            fs=self, remote_path=path, mode=mode, filepath=filepath
+        )

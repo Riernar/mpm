@@ -356,14 +356,15 @@ def make(
     pack_manifest["pack-version"] = utils.Version(pack_manifest["pack-version"])
     return pack_manifest
 
+
 def copy(
     pack_manifest,
     *,
-    pack_version: utils.Version=None,
-    packmodes: Mapping[str, List[str]]=None,
-    mods: List[Mapping[str, str]]=None,
-    overrides: Mapping[str, str]=None,
-    override_cache: Mapping[str, str]=None,
+    pack_version: utils.Version = None,
+    packmodes: Mapping[str, List[str]] = None,
+    mods: List[Mapping[str, str]] = None,
+    overrides: Mapping[str, str] = None,
+    override_cache: Mapping[str, str] = None,
     current_packmodes: List[str] = None,
 ):
     """

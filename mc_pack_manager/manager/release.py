@@ -77,7 +77,8 @@ def curse(
         else:
             selected_mods = manifest.pack.get_selected_mods(pack_manifest, packmodes)
         LOGGER.debug(
-            "Selected mods:\n%s", common.format_modlist(selected_mods, print_version=True)
+            "Selected mods:\n%s",
+            common.format_modlist(selected_mods, print_version=True),
         )
         # Create new manifest
         LOGGER.info("Generating new manifest with selected mods")
@@ -126,12 +127,16 @@ def curse(
             LOGGER.debug("Adding pack-manifest.json")
             new_manifest = manifest.pack.copy(
                 pack_manifest,
-                current_packmodes=list(packmodes) if packmodes else list(pack_manifest["packmodes"].keys())
+                current_packmodes=list(packmodes)
+                if packmodes
+                else list(pack_manifest["packmodes"].keys()),
             )
             with archive.open("overrides/pack-manifest.json", mode="w") as fp:
                 manifest.pack.dump(new_manifest, fp)
             LOGGER.debug("Adding %s", mpm_filepath.name)
-            archive.write(filename=mpm_filepath, arcname=arcname_root / mpm_filepath.name)
+            archive.write(
+                filename=mpm_filepath, arcname=arcname_root / mpm_filepath.name
+            )
             LOGGER.debug("Adding %s", "requirements.txt")
             archive.write(
                 filename=mpm_filepath.parent / "requirements.txt",
@@ -195,9 +200,13 @@ def serverfiles(
         # Compute mods
         selected_mods = manifest.pack.get_selected_mods(pack_manifest, packmodes)
         LOGGER.debug(
-            "Selected mods:\n%s", common.format_modlist(selected_mods, print_version=True)
+            "Selected mods:\n%s",
+            common.format_modlist(selected_mods, print_version=True),
         )
-        LOGGER.info("Downloading %s mods to zip archive. This will take a while !", len(selected_mods))
+        LOGGER.info(
+            "Downloading %s mods to zip archive. This will take a while !",
+            len(selected_mods),
+        )
         mod_dir = PurePath("mods/")
         for mod in selected_mods:
             addonID, fileID = mod["addonID"], mod["fileID"]
@@ -208,10 +217,14 @@ def serverfiles(
                 jarname = network.TwitchAPI.get_file_info(addonID, fileID)["fileName"]
             archive.writestr(
                 str(mod_dir / jarname),
-                requests.get(network.TwitchAPI.get_download_url(addonID, fileID)).content,
+                requests.get(
+                    network.TwitchAPI.get_download_url(addonID, fileID)
+                ).content,
             )
         # Compute overrides
-        selected_overrides = manifest.pack.get_selected_overrides(pack_manifest, packmodes)
+        selected_overrides = manifest.pack.get_selected_overrides(
+            pack_manifest, packmodes
+        )
         LOGGER.debug(
             "Selected overrides:\n  - %s", "\n  - ".join(selected_overrides.keys()),
         )
@@ -228,12 +241,16 @@ def serverfiles(
             LOGGER.debug("Adding pack-manifest.json")
             new_manifest = manifest.pack.copy(
                 pack_manifest,
-                current_packmodes=list(packmodes) if packmodes else list(pack_manifest["packmodes"].keys())
+                current_packmodes=list(packmodes)
+                if packmodes
+                else list(pack_manifest["packmodes"].keys()),
             )
             with archive.open("pack-manifest.json", mode="w") as fp:
                 manifest.pack.dump(new_manifest, fp)
             LOGGER.debug("Adding %s", mpm_filepath.name)
-            archive.write(filename=mpm_filepath, arcname=arcname_root / mpm_filepath.name)
+            archive.write(
+                filename=mpm_filepath, arcname=arcname_root / mpm_filepath.name
+            )
             LOGGER.debug("Adding %s", "requirements.txt")
             archive.write(
                 filename=mpm_filepath.parent / "requirements.txt",
@@ -248,4 +265,6 @@ def serverfiles(
         archive.close()
         LOGGER.debug("Cleaning up temporary dir")
     LOGGER.info("Done !")
-    print("\n\nThe generated zip contains the mods' jar files. Please, be mindful of mods licenses before distributing it !")
+    print(
+        "\n\nThe generated zip contains the mods' jar files. Please, be mindful of mods licenses before distributing it !"
+    )

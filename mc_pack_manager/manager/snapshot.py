@@ -22,6 +22,7 @@ LOGGER = logging.getLogger("mpm.manager.snapshot")
 
 PathLike = Union[str, Path]
 
+
 class VersionIncr(enum.Enum):
     MINOR = (("minor",), 0)
     MEDIUM = (("medium",), 1)
@@ -41,7 +42,7 @@ class VersionIncr(enum.Enum):
                 return member
 
 
-def snapshot(curse_zip: PathLike, snapshot: PathLike, version_incr:VersionIncr=0):
+def snapshot(curse_zip: PathLike, snapshot: PathLike, version_incr: VersionIncr = 0):
     """
     Creates a pack manager representation from a curse/twitch modpack
 
@@ -62,7 +63,9 @@ def snapshot(curse_zip: PathLike, snapshot: PathLike, version_incr:VersionIncr=0
     if snapshot.exists() and not zipfile.is_zipfile(snapshot):
         raise zipfile.BadZipFile("%s is not a zip file" % snapshot)
     # Create work directories
-    with tempfile.TemporaryDirectory(dir=".") as temp_snap, tempfile.TemporaryDirectory(dir=".") as temp_curse:
+    with tempfile.TemporaryDirectory(dir=".") as temp_snap, tempfile.TemporaryDirectory(
+        dir="."
+    ) as temp_curse:
         temp_snap = Path(temp_snap)
         temp_curse = Path(temp_curse)
         # Extract previous snapshot, if any
@@ -113,9 +116,7 @@ def snapshot(curse_zip: PathLike, snapshot: PathLike, version_incr:VersionIncr=0
 
         # Create new manifest
         new_pack_manifest = manifest.pack.make(
-            pack_version=pack_manifest["pack-version"].incr(
-                version_incr._value_
-            ),
+            pack_version=pack_manifest["pack-version"].incr(version_incr._value_),
             packmodes=packmodes,
             mods=new_modlist,
             overrides=overrides,
@@ -157,14 +158,13 @@ def snapshot(curse_zip: PathLike, snapshot: PathLike, version_incr:VersionIncr=0
         snapshot.parent.mkdir(parents=True, exist_ok=True)
         LOGGER.info("Compressing new snapshot")
         with zipfile.ZipFile(
-            snapshot,
-            mode="w",
-            compression=zipfile.ZIP_DEFLATED,
-            compresslevel=6,
+            snapshot, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=6,
         ) as archive:
             for element in temp_snap.rglob("*"):
                 if element.is_file():
-                    archive.write(filename=element, arcname=element.relative_to(temp_snap))
+                    archive.write(
+                        filename=element, arcname=element.relative_to(temp_snap)
+                    )
         LOGGER.info("Compressed")
         LOGGER.info("Deleting temporary directories %s and %s", temp_snap, temp_curse)
     LOGGER.info("Done !")

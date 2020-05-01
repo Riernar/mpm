@@ -57,6 +57,7 @@ def assign_overrides(packmodes, overrides, override_cache, added_override=None):
     gui.run()
     return gui.packmodes, gui.overrides
 
+
 def confirm_install() -> bool:
     """
     Confirms that update should be performed on an empty install
@@ -71,9 +72,6 @@ def confirm_install() -> bool:
     root = tk.Tk()
     root.withdraw()
     try:
-        return mbox.askokcancel(
-            title="Confirm Update",
-            message=message
-        )
+        return mbox.askokcancel(title="Confirm Update", message=message)
     finally:
         root.destroy()

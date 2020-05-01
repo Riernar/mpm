@@ -75,7 +75,9 @@ class LocalFileSystem(common.FileSystem):
         """
         path = self.base_dir / Path(path)
         if path.is_dir():
-            raise IsADirectoryError("Cannot unlink directory %s, use rmdir instead" % path)
+            raise IsADirectoryError(
+                "Cannot unlink directory %s, use rmdir instead" % path
+            )
         if path.is_file():
             path.unlink()
 

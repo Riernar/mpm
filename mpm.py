@@ -40,7 +40,9 @@ def configure_logging(debug=False, log_file: Path = "mc-pack-manager.log"):
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG if debug else logging.INFO)
     ## Formatter
-    console_formatter = logging.Formatter(CONSOLE_FORMAT_DEBUG if debug else CONSOLE_FORMAT, style="{")
+    console_formatter = logging.Formatter(
+        CONSOLE_FORMAT_DEBUG if debug else CONSOLE_FORMAT, style="{"
+    )
     console_handler.setFormatter(console_formatter)
     # Attach to module logger
     logger.addHandler(file_handler)
@@ -52,13 +54,9 @@ if __name__ == "__main__":
         description="Minecraft Pack Manager -- Helps manage minecraft modpacks"
     )
     parser.add_argument(
-        "-d", "--debug",
-        help="Activate debug mode on the console",
-        action="store_true"
+        "-d", "--debug", help="Activate debug mode on the console", action="store_true"
     )
-    subparsers = parser.add_subparsers(
-        required=True, help="Available subcommands:"
-    )
+    subparsers = parser.add_subparsers(required=True, help="Available subcommands:")
 
     # Snapshot subcommand
     snapshot_parser = subparsers.add_parser(
@@ -75,16 +73,14 @@ if __name__ == "__main__":
         help="path to the zip file exported by the curse/twitch app",
     )
     snapshot_parser.add_argument(
-        "snapshot",
-        type=Path,
-        help="path to the snapshot file to create or update",
+        "snapshot", type=Path, help="path to the snapshot file to create or update",
     )
     snapshot_parser.add_argument(
-        "-v", "--version-incr",
+        "-v",
+        "--version-incr",
         choices=("MINOR", "MEDIUM", "MAJOR"),
         default="MINOR",
-        help="Version number of the snapshot to increase. Defaults to MINOR"
-
+        help="Version number of the snapshot to increase. Defaults to MINOR",
     )
 
     # Release subcommands
@@ -92,7 +88,9 @@ if __name__ == "__main__":
         "release",
         help="Creates a curse modpack zip or server files from a MPM snapshot",
     )
-    release_parser.description = "Creates a curse modpack zip or server files from a MPM snapshot"
+    release_parser.description = (
+        "Creates a curse modpack zip or server files from a MPM snapshot"
+    )
     release_subparser = release_parser.add_subparsers(
         required=True, help="Release type"
     )
@@ -101,9 +99,7 @@ if __name__ == "__main__":
         "curse",
         help="Makes a curse modpack zip. Used to release a pack version for Curse or MultiMC",
     )
-    curse_release_parser.description = (
-        "Creates a release .zip of the modpack compatible with curse, the twitch app and MultiMC. Allows to select packmodes to release"
-    )
+    curse_release_parser.description = "Creates a release .zip of the modpack compatible with curse, the twitch app and MultiMC. Allows to select packmodes to release"
     curse_release_parser.set_defaults(command=mpm.manager.release.curse)
     curse_release_parser.add_argument(
         "snapshot",
@@ -133,7 +129,8 @@ if __name__ == "__main__":
     )
     ## Server release
     server_release_parser = release_subparser.add_parser(
-        "serverfiles", help="Creates server files, with mod jars and overrides. Doesn't include minecraft or minecraftforge"
+        "serverfiles",
+        help="Creates server files, with mod jars and overrides. Doesn't include minecraft or minecraftforge",
     )
     server_release_parser.description = "Creates the server files for the selected packmodes, with mods' jar and overrides. Be mindfule of mods' licence before ditributing this. WARNING: this does *not* contains minecraft or minecraftforge"
     server_release_parser.set_defaults(command=mpm.manager.release.serverfiles)
@@ -166,35 +163,36 @@ if __name__ == "__main__":
 
     # Update subcommand
     update_parser = subparsers.add_parser(
-        "update",
-        help="Updates a modpack installation from a MPM snapshot",
+        "update", help="Updates a modpack installation from a MPM snapshot",
     )
     update_parser.description = (
         "Updates a modpack installation to a different version and/or set of packmodes"
     )
     update_parser.set_defaults(command=mpm.manager.update.update)
-    update_parser.epilog = "NOTE: Changing packmodes without changing versions is fully supported"
-    update_parser.add_argument(
-        "source",
-        help="Update source, by default a path. See also --update"
+    update_parser.epilog = (
+        "NOTE: Changing packmodes without changing versions is fully supported"
     )
     update_parser.add_argument(
-        "install",
-        help="Installation path or url, by default a path. See also --pack"
+        "source", help="Update source, by default a path. See also --update"
     )
     update_parser.add_argument(
-        "-u", "--update",
+        "install", help="Installation path or url, by default a path. See also --pack"
+    )
+    update_parser.add_argument(
+        "-u",
+        "--update",
         choices=("local", "http"),
         default="local",
         dest="source_type",
-        help="Specifies the type of the update source. Defaults to 'local'. LOCAL: path to a local MPM snapshot file. HTTP: url to a http(s) server exposing the content of the MPM snapshot"
+        help="Specifies the type of the update source. Defaults to 'local'. LOCAL: path to a local MPM snapshot file. HTTP: url to a http(s) server exposing the content of the MPM snapshot",
     )
     update_parser.add_argument(
-        "-i", "--install",
+        "-i",
+        "--install",
         choices=("local", "ftp"),
         default="local",
         dest="install_type",
-        help="Specifies the type of the pack installation. Defaults to 'local'. LOCAL: ath to a local modpack directory. FTP: ftp url to a remote modpack installtion, e.g. a hosted minecraft server"
+        help="Specifies the type of the pack installation. Defaults to 'local'. LOCAL: ath to a local modpack directory. FTP: ftp url to a remote modpack installtion, e.g. a hosted minecraft server",
     )
     update_parser.add_argument(
         "packmodes",
