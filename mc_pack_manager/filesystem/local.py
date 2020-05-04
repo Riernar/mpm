@@ -195,7 +195,7 @@ class LocalFileSystem(common.FileSystem):
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(src=src, dst=dest)
 
-    def open(self, path: common.PathLike, mode="rt"):
+    def open(self, path: common.PathLike, mode="rt", encoding=None):
         """
         Open a file on the filesystem
 
@@ -203,4 +203,4 @@ class LocalFileSystem(common.FileSystem):
             path -- path to open relative to base_dir
             mode -- open mode. See built-ins open()
         """
-        return open(self.base_dir / Path(path), mode=mode)
+        return open(self.base_dir / Path(path), mode=mode, encoding=encoding)

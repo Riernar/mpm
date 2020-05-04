@@ -60,7 +60,7 @@ def write(curse_manifest, filepath: PathLike):
         curse_manifest -- manifest to write
         filepath -- file to write into
     """
-    with Path(filepath).open("w") as f:
+    with Path(filepath).open("w", encoding="utf-8") as f:
         json.dump(curse_manifest, f, indent=4)
 
 

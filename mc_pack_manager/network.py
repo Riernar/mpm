@@ -8,6 +8,9 @@ import json
 import logging
 import requests
 
+# Local import
+from . import utils
+
 LOGGER = logging.getLogger("mpm.network")
 
 
@@ -26,7 +29,19 @@ class TwitchAPI:
 
     @classmethod
     def get(cls, *args, **kwargs):
-        return requests.get(*args, headers=cls.HEADERS, **kwargs)
+        try:
+            return requests.get(*args, headers=cls.HEADERS, **kwargs)
+        except Exception as err:
+            LOGGER.warn(
+                "A web request failed, trying again in case this is a network problem"
+            )
+            LOGGER.debug(
+                "error is %s\n  args: %s\n  kwargs: %s",
+                utils.err_str(err),
+                args,
+                kwargs,
+            )
+            return requests.get(*args, headers=cls.HEADERS, **kwargs)
 
     @classmethod
     def get_addon_info(cls, addonID):

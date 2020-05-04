@@ -337,6 +337,6 @@ def update_pack(
     new_manifest = manifest.pack.copy(
         remote_manifest, current_packmodes=list(packmodes)
     )
-    with fs.open("pack-manifest.json", "wt") as f:
+    with fs.open("pack-manifest.json", "wt", encoding="utf-8") as f:
         manifest.pack.dump(new_manifest, f, encode=False)
     LOGGER.info("Done !")

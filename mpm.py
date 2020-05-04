@@ -30,7 +30,7 @@ def configure_logging(debug=False, log_file: Path = "mc-pack-manager.log"):
     logger.propagate = False
     # Logging to file
     ## Handler
-    file_handler = logging.FileHandler(str(log_file), mode="w")
+    file_handler = logging.FileHandler(str(log_file), mode="w", encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     ## Formatyer
     file_formatter = logging.Formatter(FILE_FORMAT, style="{")

@@ -171,7 +171,7 @@ class FileSystem(ABC):
         """
 
     @abstractmethod
-    def open(self, path: PathLike, mode: Union[str, utils.OpenMode]):
+    def open(self, path: PathLike, mode: Union[str, utils.OpenMode], encoding=None):
         """
         Open a file on the filesystem
 
@@ -192,6 +192,7 @@ class RemoteFileObject:
         remote_path: PathLike,
         mode: utils.OpenMode,
         filepath: PathLike,
+        encoding: str,
     ):
         self.fs = fs
         self.filepath = filepath
@@ -201,6 +202,7 @@ class RemoteFileObject:
         self.file_handler = open(
             self.filepath,
             mode=mode.file._value_ + mode.data._value_ + ("+" if mode.update else ""),
+            encoding=encoding,
         )
 
     def __enter__(self):

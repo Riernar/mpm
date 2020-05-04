@@ -391,7 +391,7 @@ class FTPFileSystem(common.FileSystem):
                 with open(elem, mode="rb") as f:
                     self.ftp.storbinary(cmd="STOR %s" % dst.as_posix(), fp=f)
 
-    def open(self, path: common.PathLike, mode: utils.OpenMode = "rt"):
+    def open(self, path: common.PathLike, mode: utils.OpenMode = "rt", encoding=None):
         """
         Open a file on the filesystem
 
@@ -424,5 +424,5 @@ class FTPFileSystem(common.FileSystem):
                     callback=lambda data: f.write(data),
                 )
         return common.RemoteFileObject(
-            fs=self, remote_path=path, mode=mode, filepath=filepath
+            fs=self, remote_path=path, mode=mode, filepath=filepath, encoding=None
         )

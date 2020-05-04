@@ -306,7 +306,7 @@ def write(pack_manifest, filepath: Path):
         pack_manifest -- pack_manifest to write
         filepath -- destination file
     """
-    with Path(filepath).open("w") as f:
+    with Path(filepath).open("w", encoding="utf-8") as f:
         json.dump(pack_manifest, f, indent=4, cls=utils.SerializableClassJSONEncoder)
 
 
