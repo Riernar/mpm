@@ -23,6 +23,29 @@ LOGGER = logging.getLogger("mpm.manager.release")
 PathLike = Union[str, Path]
 
 
+def add_overrides(
+    archive: zipfile.ZipFile, overrides: dict, from_: Path, to: PurePath = None
+):
+    LOGGER.info("Adding selected overrides to .zip archive")
+    logflag = False
+    mpm_path = PurePath("mpm")
+    for filepath in overrides.keys():
+        filepath = PurePath(filepath)
+        if (
+            len(filepath.parents) > 1
+            and filepath.parents[len(filepath.parents) - 2] == mpm_path
+        ):
+            if not logflag:
+                LOGGER.info("Skipping overrides that are part of MPM")
+                logflag = True
+            LOGGER.debug(f"Skipped {filepath}")
+            continue
+        archive.write(
+            filename=from_ / filepath,
+            arcname=(to / filepath) if to is not None else filepath,
+        )
+
+
 def curse(
     snapshot: PathLike,
     output_zip: PathLike,
@@ -102,10 +125,12 @@ def curse(
             "Selected overrides:\n  - %s", "\n  - ".join(selected_overrides.keys()),
         )
         # Compress overrides
-        LOGGER.info("Adding selected overrides to .zip archive")
-        for filepath in selected_overrides.keys():
-            path = pack_dir / "overrides" / filepath
-            archive.write(filename=path, arcname=path.relative_to(pack_dir))
+        add_overrides(
+            archive=archive,
+            overrides=selected_overrides,
+            from_=pack_dir / "overrides",
+            to=PurePath("overrides"),
+        )
         # Includes extra files (e.g. modlist)
         LOGGER.info("Adding extra modpack files to .zip archives")
         for extra in pack_dir.glob("*"):
@@ -134,6 +159,7 @@ def curse(
             with archive.open("overrides/pack-manifest.json", mode="w") as fp:
                 manifest.pack.dump(new_manifest, fp)
             LOGGER.debug("Adding %s", mpm_filepath.name)
+
             archive.write(
                 filename=mpm_filepath, arcname=arcname_root / mpm_filepath.name
             )
@@ -229,10 +255,9 @@ def serverfiles(
             "Selected overrides:\n  - %s", "\n  - ".join(selected_overrides.keys()),
         )
         # Compress overrides
-        LOGGER.info("Adding selected overrides to zip archive")
-        for filepath in selected_overrides.keys():
-            path = pack_dir / "overrides" / filepath
-            archive.write(filename=path, arcname=filepath)
+        add_overrides(
+            archive=archive, overrides=selected_overrides, from_=pack_dir / "overrides",
+        )
         ## Include MPM
         if mpm_filepath is not None:
             LOGGER.info("Adding mpm to zip archive")

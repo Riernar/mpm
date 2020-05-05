@@ -88,6 +88,11 @@ if __name__ == "__main__":
         default="MINOR",
         help="Version number of the snapshot to increase. Defaults to MINOR",
     )
+    snapshot_parser.add_argument(
+        "--include-mpm",
+        action="store_true",
+        help="Bundle MPM into the snapshot as an override. This is useful when client update from an http server and you want to update MPM with the pack (you still need to use --include-mpm to bundle it in the release)",
+    )
 
     # Release subcommands
     release_parser = subparsers.add_parser(

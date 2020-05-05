@@ -7,13 +7,14 @@ Part of the Minecraft Pack Manager utility (mpm)
 import contextlib
 import enum
 import logging
-from pathlib import Path
+from pathlib import Path, PurePath
 import shutil
 import tempfile
 from typing import Union
 import zipfile
 
 # Local imports
+from .. import _filelist
 from .. import manifest
 from .. import ui
 from ..manager import common
@@ -42,7 +43,12 @@ class VersionIncr(enum.Enum):
                 return member
 
 
-def snapshot(curse_zip: PathLike, snapshot: PathLike, version_incr: VersionIncr = 0):
+def snapshot(
+    curse_zip: PathLike,
+    snapshot: PathLike,
+    version_incr: VersionIncr = 0,
+    mpm_filepath=None,
+):
     """
     Creates a pack manager representation from a curse/twitch modpack
 
@@ -86,6 +92,29 @@ def snapshot(curse_zip: PathLike, snapshot: PathLike, version_incr: VersionIncr 
         ## Build new modlist
         new_modlist = common.build_new_modlist(pack_manifest, curse_manifest)
         ## Build new overrides
+        ### Include MPM is needed
+        if mpm_filepath is not None:
+            LOGGER.info("Adding mpm to the overrides before scanning")
+            mpm_filepath = Path(mpm_filepath)
+            base_path = temp_curse / curse_manifest["overrides"] / "mpm"
+            base_path.mkdir(exist_ok=True, parents=True)
+            LOGGER.debug("Adding %s", mpm_filepath.name)
+            dst = base_path / mpm_filepath.name
+            if dst.is_file():
+                dst.unlink()
+            shutil.copyfile(src=mpm_filepath, dst=dst)
+            LOGGER.debug("Adding %s", "requirements.txt")
+            dst = base_path / "requirements.txt"
+            if dst.is_file():
+                dst.unlink()
+            shutil.copyfile(src=mpm_filepath.parent / "requirements.txt", dst=dst)
+            for source_file in _filelist.MPM_SRC_FILES:
+                LOGGER.debug("Adding %s", source_file.relative_to(mpm_filepath.parent))
+                dst = base_path / source_file.relative_to(mpm_filepath.parent)
+                dst.parent.mkdir(exist_ok=True, parents=True)
+                if dst.is_file():
+                    dst.unlink()
+                shutil.copyfile(src=source_file, dst=dst)
         new_override_cache = common.build_overrides_cache(
             temp_curse / curse_manifest["overrides"]
         )
