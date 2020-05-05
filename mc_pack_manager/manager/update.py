@@ -262,9 +262,8 @@ def update_pack(
         if ui.confirm_install():
             local_manifest = manifest.pack.get_default()
         else:
-            sys.exit(
-                "User aborted update. In case this is before a modpack start, I'm crashing to prevent the start"
-            )
+            print("User aborted update. In case this is before a modpack start, I'm crashing to prevent the start")
+            sys.exit(1)
     # Get remote configuration
     LOGGER.info("Reading update manifest")
     remote_manifest = update.get_manifest()

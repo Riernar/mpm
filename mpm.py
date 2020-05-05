@@ -9,6 +9,7 @@ import argparse
 import inspect
 import logging
 from pathlib import Path
+import sys
 import traceback
 
 # Local imports
@@ -246,3 +247,4 @@ if __name__ == "__main__":
             " Exceptions are not yet handled in MPM, so this might be because of a wrong argument.\n"
             "If this is a problem in MPM, please fill in an issue at\nhttps://github.com/Riernar/mpm/issues\nand provide the log file"
         )
+        sys.exit(1)
