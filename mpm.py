@@ -23,6 +23,14 @@ FILE_FORMAT = "[{asctime}][{name: <20}][{funcName}()][{levelname}] {message}"
 CONSOLE_FORMAT = "[{levelname}] {message}"
 CONSOLE_FORMAT_DEBUG = "[{name: <20}][{levelname}] {message}"
 
+class FlushingStreamHandler(logging.StreamHandler):
+    """
+    Stream handler that calls the flush() method after each log operation
+    Useful because e.g. MultiMC will log to a file instead of an actual stream
+    """
+    def emit(self, record):
+        super().emit(record)
+        self.flush()
 
 def configure_logging(debug=False, log_file: Path = "mc-pack-manager.log"):
     # module logger
@@ -38,7 +46,7 @@ def configure_logging(debug=False, log_file: Path = "mc-pack-manager.log"):
     file_handler.setFormatter(file_formatter)
     # Console logging
     ## Handler
-    console_handler = logging.StreamHandler()
+    console_handler = FlushingStreamHandler()
     console_handler.setLevel(logging.DEBUG if debug else logging.INFO)
     ## Formatter
     console_formatter = logging.Formatter(

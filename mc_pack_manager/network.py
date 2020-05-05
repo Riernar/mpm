@@ -96,7 +96,7 @@ class TwitchAPI:
 
 def urlget(*args, **kwargs):
     try:
-        return urlget(*args, **kwargs)
+        return requests.get(*args, **kwargs)
     except Exception as err:
         LOGGER.warn(
             "A web request failed, trying again in case this is a network problem"
@@ -104,4 +104,4 @@ def urlget(*args, **kwargs):
         LOGGER.debug(
             "error is %s\n  args: %s\n  kwargs: %s", utils.err_str(err), args, kwargs,
         )
-        return urlget(*args, **kwargs)
+        return requests.get(*args, **kwargs)
