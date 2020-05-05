@@ -204,8 +204,8 @@ def build_overrides_cache(override_dir: Path) -> OrderedDict:
     for filepath in override_dir.rglob("*"):
         if filepath.is_file():
             rel_path = PurePath(filepath.relative_to(override_dir))
-            if str(rel_path) not in ("manifest.json", "pack-manifest.json"):
-                override_cache[str(rel_path)] = utils.file_hash(filepath)
+            if rel_path.as_posix() not in ("manifest.json", "pack-manifest.json"):
+                override_cache[rel_path.as_posix()] = utils.file_hash(filepath)
     LOGGER.info("Sorting generated override cache")
     return OrderedDict(sorted(override_cache.items(), key=lambda t: t[0]))
 
