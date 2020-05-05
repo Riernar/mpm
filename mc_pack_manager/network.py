@@ -29,19 +29,7 @@ class TwitchAPI:
 
     @classmethod
     def get(cls, *args, **kwargs):
-        try:
-            return requests.get(*args, headers=cls.HEADERS, **kwargs)
-        except Exception as err:
-            LOGGER.warn(
-                "A web request failed, trying again in case this is a network problem"
-            )
-            LOGGER.debug(
-                "error is %s\n  args: %s\n  kwargs: %s",
-                utils.err_str(err),
-                args,
-                kwargs,
-            )
-            return requests.get(*args, headers=cls.HEADERS, **kwargs)
+        return urlget(*args, headers=cls.HEADERS, **kwargs)
 
     @classmethod
     def get_addon_info(cls, addonID):
@@ -71,8 +59,20 @@ class TwitchAPI:
         key = "%s/%s" % (addonID, fileID)
         if key not in cls.FILE_CACHE:
             LOGGER.debug("Downloding file info for file %s", key)
-            req = cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}")
-            cls.FILE_CACHE[key] = json.loads(req.content)
+            try:
+                cls.FILE_CACHE[key] = json.loads(
+                    cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}").content
+                )
+            except json.JSONDecodeError as err:
+                LOGGER.warn(
+                    "Decoding received json failed, trying again in case of network problem"
+                )
+                LOGGER.debug(
+                    "On addon %s/%s raised %s", addonID, fileID, utils.err_str(err)
+                )
+                cls.FILE_CACHE[key] = json.loads(
+                    cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}").content
+                )
             return cls.FILE_CACHE[key]
         else:
             LOGGER.debug("Using cached info for file %s", key)
@@ -92,3 +92,16 @@ class TwitchAPI:
             return cls.get(
                 f"{cls.ROOT}/addon/{addonID}/file/{fileID}/download-url"
             ).content
+
+
+def urlget(*args, **kwargs):
+    try:
+        return urlget(*args, **kwargs)
+    except Exception as err:
+        LOGGER.warn(
+            "A web request failed, trying again in case this is a network problem"
+        )
+        LOGGER.debug(
+            "error is %s\n  args: %s\n  kwargs: %s", utils.err_str(err), args, kwargs,
+        )
+        return urlget(*args, **kwargs)

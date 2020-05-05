@@ -6,8 +6,9 @@ Part of the Minecraft Pack Manager utility (mpm)
 # Standard library import
 from abc import ABC, abstractmethod
 import enum
+import json
 import logging
-from pathlib import Path
+from pathlib import Path, PurePath
 import requests
 import sys
 import tempfile
@@ -127,15 +128,9 @@ class HTTPUpdateProvider(UpdateProvider):
         self.url = urllib.parse.urlparse(url)
         if self.url.scheme not in ("http", "https"):
             raise ValueError("URL must be HTTP(s)")
-        self.path = Path(self.url.path)
+        self.path = PurePath(self.url.path)
         try:
-            self.manifest = manifest.pack.from_str(
-                requests.get(
-                    self.url._replace(
-                        path=str(self.path / "pack-manifest.json")
-                    ).geturl()
-                ).content
-            )
+            self._make_manifest()
         except Exception as err:
             LOGGER.debug("Exception: %s", utils.err_str(err))
             raise ValueError("URL is invalid, it doesn't have a pack-manifest.json")
@@ -146,6 +141,23 @@ class HTTPUpdateProvider(UpdateProvider):
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
+
+    def _get_url(self, subpath):
+        return self.url._replace(path=(self.path / subpath).as_posix()).geturl()
+
+    def _make_manifest(self):
+        url = self._get_url("pack-manifest.json")
+        LOGGER.debug(f"Retrieving remote pack-manifest.json at {url}")
+        try:
+            self.manifest = manifest.pack.from_str(requests.get(url).content)
+        except json.JSONDecodeError as err:
+            LOGGER.warn(
+                "Couldn't read the pack-manifest.json, trying again in case this is a network problem"
+            )
+            LOGGER.debug("Error was %s", utils.err_str(err))
+            self.manifest = manifest.pack.from_str(
+                requests.get(self._get_url("pack-manifest.json")).content
+            )
 
     def get_manifest(self):
         return self.manifest
@@ -164,8 +176,7 @@ class HTTPUpdateProvider(UpdateProvider):
     def install_override(self, fs: filesystem.common.FileSystem, override: str):
         LOGGER.info("Downloading override %s", override)
         fs.download(
-            self.url._replace(path=str(self.path / "overrides" / override)).geturl(),
-            override,
+            self._get_url(f"overrides/{override}"), override,
         )
 
 
