@@ -56,6 +56,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d", "--debug", help="Activate debug mode on the console", action="store_true"
     )
+    parser.add_argument(
+        "-l",
+        "--logdir",
+        type=Path,
+        help="Path to the directory to write the log into. If a file is provided, its parent is used",
+    )
     subparsers = parser.add_subparsers(required=True, help="Available subcommands:")
 
     # Snapshot subcommand
@@ -209,7 +215,14 @@ if __name__ == "__main__":
         kwargs["mpm_filepath"] = MPM_FILE if kwargs.pop("include_mpm") else None
 
     # Logging configuration
-    configure_logging(kwargs.pop("debug", False))
+    logdir = kwargs.pop("logdir", Path("."))
+    if logdir.is_file():
+        logdir = logdir.parent
+    if not logdir.is_dir():
+        parser.error("%s is not a directory" % logdir)
+    configure_logging(
+        debug=kwargs.pop("debug", False), log_file=logdir / "mc-pack-manager.log"
+    )
 
     # Command selection
     try:
