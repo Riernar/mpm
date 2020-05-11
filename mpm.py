@@ -69,6 +69,7 @@ if __name__ == "__main__":
         "-l",
         "--logdir",
         type=Path,
+        default=Path("."),
         help="Path to the directory to write the log into. If a file is provided, its parent is used",
     )
     subparsers = parser.add_subparsers(required=True, help="Available subcommands:")
