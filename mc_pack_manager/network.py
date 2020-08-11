@@ -44,7 +44,16 @@ class TwitchAPI:
         """
         if addonID not in cls.MOD_CACHE:
             LOGGER.debug("Downloading info for addon %s", addonID)
-            req = cls.get(f"{cls.ROOT}/addon/{addonID}")
+            try:
+                cls.MOD_CACHE[addonID]req = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
+            except json.JSONDecoderError as err:
+                LOGGER.warn(
+                    "Decoding received JSON failed, trying again in case of network problem"
+                )
+                LOGGER.debug(
+                    "While resolving %s, encountered: %s", addonID, utils.err_str(err)
+                )
+                cls.MOD_CACHE[addonID]req = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
             cls.MOD_CACHE[addonID] = json.loads(req.content)
             return cls.MOD_CACHE[addonID]
         else:
@@ -65,10 +74,10 @@ class TwitchAPI:
                 )
             except json.JSONDecodeError as err:
                 LOGGER.warn(
-                    "Decoding received json failed, trying again in case of network problem"
+                    "Decoding received JSON failed, trying again in case of network problem"
                 )
                 LOGGER.debug(
-                    "On addon %s/%s raised %s", addonID, fileID, utils.err_str(err)
+                    "While resolving %s/%s, encountered: %s", addonID, fileID, utils.err_str(err)
                 )
                 cls.FILE_CACHE[key] = json.loads(
                     cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}").content
