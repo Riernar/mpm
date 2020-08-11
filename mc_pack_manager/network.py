@@ -26,10 +26,11 @@ class TwitchAPI:
     }
     MOD_CACHE = {}
     FILE_CACHE = {}
+    SERVER_ERROR_RETRY_LIMIT = 5
 
     @classmethod
     def get(cls, *args, **kwargs):
-        return urlget(*args, headers=cls.HEADERS, **kwargs)
+        return cls.urlget(*args, headers=cls.HEADERS, **kwargs)
 
     @classmethod
     def get_addon_info(cls, addonID):
@@ -46,7 +47,7 @@ class TwitchAPI:
             LOGGER.debug("Downloading info for addon %s", addonID)
             try:
                 cls.MOD_CACHE[addonID] = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
-            except json.JSONDecoderError as err:
+            except json.JSONDecodeError as err:
                 LOGGER.warn(
                     "Decoding received JSON failed, trying again in case of network problem"
                 )
@@ -101,15 +102,18 @@ class TwitchAPI:
                 f"{cls.ROOT}/addon/{addonID}/file/{fileID}/download-url"
             ).content
 
-
-def urlget(*args, **kwargs):
-    try:
-        return requests.get(*args, **kwargs)
-    except Exception as err:
-        LOGGER.warn(
-            "A web request failed, trying again in case this is a network problem"
-        )
-        LOGGER.debug(
-            "error is %s\n  args: %s\n  kwargs: %s", utils.err_str(err), args, kwargs,
-        )
-        return requests.get(*args, **kwargs)
+    @classmethod
+    def urlget(cls, *args, **kwargs):
+        count = 0
+        while True:
+            try:
+                req = requests.get(*args, **kwargs)
+                count += 1
+            except Exception as err:
+                LOGGER.debug(f"A web request raised on trials {count +1}: {utils.err_str(err)}")
+                LOGGER.debug("Retrying")
+            if not (500 <= req.status_code < 600 and count < cls.SERVER_ERROR_RETRY_LIMIT):
+                break
+        if (500 <= req.status_code < 600):
+            LOGGER.fatal("A web request failed %s time, check your network and the server", cls.SERVER_ERROR_RETRY_LIMIT)
+        return req
