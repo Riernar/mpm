@@ -121,10 +121,10 @@ class TwitchAPI:
             if req.ok or count >= cls.SERVER_ERROR_RETRY_LIMIT:
                 break
             LOGGER.debug("Got HTTP status %s, trying again", req.status_code)
-            LOGGER.debug("HTTP Headers were:\n%s", req.headers)
+            LOGGER.debug("HTTP Headers were:\n%s", json.dumps(req.headers, indent=4))
             sleep(0.25) # to not be too aggressive with connexions
         if not req.ok:
             LOGGER.fatal("A web request failed %s time, check your network and the server", cls.SERVER_ERROR_RETRY_LIMIT)
             LOGGER.debug("HTTP response code: %s", req.status_code)
-            LOGGER.debug("Headers:\n%s", req.headers)
+            LOGGER.debug("Headers:\n%s", json.dumps(req.headers, indent=4))
         return req
