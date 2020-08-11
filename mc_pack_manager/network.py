@@ -45,7 +45,7 @@ class TwitchAPI:
         if addonID not in cls.MOD_CACHE:
             LOGGER.debug("Downloading info for addon %s", addonID)
             try:
-                cls.MOD_CACHE[addonID]req = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
+                cls.MOD_CACHE[addonID] = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
             except json.JSONDecoderError as err:
                 LOGGER.warn(
                     "Decoding received JSON failed, trying again in case of network problem"
@@ -53,8 +53,7 @@ class TwitchAPI:
                 LOGGER.debug(
                     "While resolving %s, encountered: %s", addonID, utils.err_str(err)
                 )
-                cls.MOD_CACHE[addonID]req = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
-            cls.MOD_CACHE[addonID] = json.loads(req.content)
+                cls.MOD_CACHE[addonID] = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
             return cls.MOD_CACHE[addonID]
         else:
             LOGGER.debug("Using cached info for addon %s", addonID)
