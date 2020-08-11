@@ -103,6 +103,7 @@ def build_new_modlist(pack_manifest, curse_manifest):
             mod["name"] = mod_map[addonID]["name"]
         else:
             mod["name"] = network.TwitchAPI.get_addon_info(addonID)["name"]
+            LOGGER.info("Resolved '%s'", mod["name"])
         if (
             addonID in mod_map
             and mod_map[addonID]["fileID"] == mod["fileID"]
@@ -113,6 +114,7 @@ def build_new_modlist(pack_manifest, curse_manifest):
             mod["filename"] = network.TwitchAPI.get_file_info(addonID, mod["fileID"])[
                 "fileName"
             ]
+            LOGGER.info("Resolved '%s' to '%s'", mod["name"], mod["filename"])
         new_mods.append(mod)
     return new_mods
 

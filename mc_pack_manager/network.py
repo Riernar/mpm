@@ -7,6 +7,7 @@ Module handling network interactions
 import json
 import logging
 import requests
+from time import sleep
 
 # Local import
 from . import utils
@@ -21,12 +22,13 @@ class TwitchAPI:
     """
 
     ROOT = r"https://addons-ecs.forgesvc.net/api/v2"
+    #ROOT= r"https://private-anon-d0ed3247cf-twitchappapi.apiary-proxy.com/api/v2/"
     HEADERS = {
         "User-Agent": r"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.157 Safari/537.36"
     }
     MOD_CACHE = {}
     FILE_CACHE = {}
-    SERVER_ERROR_RETRY_LIMIT = 5
+    SERVER_ERROR_RETRY_LIMIT = 10
 
     @classmethod
     def get(cls, *args, **kwargs):
@@ -46,7 +48,8 @@ class TwitchAPI:
         if addonID not in cls.MOD_CACHE:
             LOGGER.debug("Downloading info for addon %s", addonID)
             try:
-                cls.MOD_CACHE[addonID] = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
+                req = cls.get(f"{cls.ROOT}/addon/{addonID}")
+                cls.MOD_CACHE[addonID] = json.loads(req.content)
             except json.JSONDecodeError as err:
                 LOGGER.warn(
                     "Decoding received JSON failed, trying again in case of network problem"
@@ -54,6 +57,7 @@ class TwitchAPI:
                 LOGGER.debug(
                     "While resolving %s, encountered: %s", addonID, utils.err_str(err)
                 )
+                LOGGER.debug("HTTP status code was %s", req.status_code)
                 cls.MOD_CACHE[addonID] = json.loads(cls.get(f"{cls.ROOT}/addon/{addonID}").content)
             return cls.MOD_CACHE[addonID]
         else:
@@ -69,8 +73,9 @@ class TwitchAPI:
         if key not in cls.FILE_CACHE:
             LOGGER.debug("Downloding file info for file %s", key)
             try:
+                req = cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}")
                 cls.FILE_CACHE[key] = json.loads(
-                    cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}").content
+                    req.content
                 )
             except json.JSONDecodeError as err:
                 LOGGER.warn(
@@ -79,6 +84,7 @@ class TwitchAPI:
                 LOGGER.debug(
                     "While resolving %s/%s, encountered: %s", addonID, fileID, utils.err_str(err)
                 )
+                LOGGER.debug("HTTP status code was %s", req.status_code)
                 cls.FILE_CACHE[key] = json.loads(
                     cls.get(f"{cls.ROOT}/addon/{addonID}/file/{fileID}").content
                 )
@@ -112,8 +118,13 @@ class TwitchAPI:
             except Exception as err:
                 LOGGER.debug(f"A web request raised on trials {count +1}: {utils.err_str(err)}")
                 LOGGER.debug("Retrying")
-            if not (500 <= req.status_code < 600 and count < cls.SERVER_ERROR_RETRY_LIMIT):
+            if req.ok or count >= cls.SERVER_ERROR_RETRY_LIMIT:
                 break
-        if (500 <= req.status_code < 600):
+            LOGGER.debug("Got HTTP status %s, trying again", req.status_code)
+            LOGGER.debug("HTTP Headers were:\n%s", req.headers)
+            sleep(0.25) # to not be too aggressive with connexions
+        if not req.ok:
             LOGGER.fatal("A web request failed %s time, check your network and the server", cls.SERVER_ERROR_RETRY_LIMIT)
+            LOGGER.debug("HTTP response code: %s", req.status_code)
+            LOGGER.debug("Headers:\n%s", req.headers)
         return req
