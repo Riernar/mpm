@@ -126,7 +126,7 @@ class LocalFileSystem(common.FileSystem):
                 "%s exists, cannot download in that destination" % dest
             )
         dest.parent.mkdir(exist_ok=True, parents=True)
-        with (self.base_dir / Path(dest)).open("wb") as f:
+        with dest.open("wb") as f:
             f.write(requests.get(url).content)
 
     def send_data(self, fp, dest: common.PathLike, force: bool = False):
@@ -151,7 +151,7 @@ class LocalFileSystem(common.FileSystem):
                 "Filelike read() method returns type %s, which is neither str or bytes"
                 % type(data)
             )
-        with (self.base_dir / dest).open("w" + mode) as lf:
+        with dest.open("w" + mode) as lf:
             lf.write(data)
             lf.write(fp.read())
 
