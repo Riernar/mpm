@@ -113,16 +113,18 @@ class TwitchAPI:
         count = 0
         while True:
             try:
-                req = requests.get(*args, **kwargs)
                 count += 1
+                req = requests.get(*args, **kwargs)
+                if req.ok:
+                    break
+                LOGGER.debug("Got HTTP status %s, trying again", req.status_code)
+                LOGGER.debug("HTTP Headers were:\n%s", json.dumps(dict(req.headers), indent=4))
             except Exception as err:
                 LOGGER.debug(f"A web request raised on trials {count +1}: {utils.err_str(err)}")
                 LOGGER.debug("Retrying")
-            if req.ok or count >= cls.SERVER_ERROR_RETRY_LIMIT:
+            if count >= cls.SERVER_ERROR_RETRY_LIMIT:
                 break
-            LOGGER.debug("Got HTTP status %s, trying again", req.status_code)
-            LOGGER.debug("HTTP Headers were:\n%s", json.dumps(dict(req.headers), indent=4))
-            sleep(0.25) # to not be too aggressive with connexions
+            sleep(0.5) # to not be too aggressive with connexions
         if not req.ok:
             LOGGER.fatal("A web request failed %s time, check your network and the server", cls.SERVER_ERROR_RETRY_LIMIT)
             LOGGER.debug("HTTP response code: %s", req.status_code)
